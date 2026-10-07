@@ -1,0 +1,417 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.qempexe.omanager",
+  "name": "Omanager",
+  "version": "1.0.0",
+  "author": "qempexe",
+  "license": "MIT",
+  "description": "Plugin manager for the Omarchy bar: browse, filter, install, update and remove plugins from a window.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Omanager",
+    "description": "Browse, filter, install and update Omarchy plugins",
+    "category": "System",
+    "aliases": [
+      "plugins",
+      "store",
+      "manager",
+      "marketplace",
+      "installer"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "colorMode": "theme",
+      "accentColor": "#ff6a1f",
+      "cardStyle": "soft",
+      "density": "comfortable",
+      "cornerRadius": 4,
+      "frame": true,
+      "fontScale": 100,
+      "surfaceTint": 6,
+      "showPreviews": true,
+      "windowWidth": 1040,
+      "windowHeight": 700,
+      "openAs": "panel",
+      "viewMode": "split",
+      "columns": "auto",
+      "filtersPanel": "left",
+      "defaultSource": "community",
+      "defaultSort": "newest",
+      "recencyScope": "either",
+      "recencyDays": "any",
+      "verifiedOnly": false,
+      "hideInstalled": false,
+      "showCounts": true,
+      "newBadgeDays": 14,
+      "catalogUrl": "https://plugins.omarchy.org/catalog.json",
+      "refreshHours": 1,
+      "refreshOnOpen": true,
+      "checkUpdates": true,
+      "confirmInstall": true,
+      "confirmRemove": true,
+      "allowUnverified": true,
+      "enableAfterInstall": true,
+      "showSecurityNote": true,
+      "barDisplay": "both",
+      "barText": "Plugins",
+      "showBadge": true,
+      "middleClick": "refresh"
+    },
+    "schema": [
+      {
+        "key": "colorMode",
+        "type": "enum",
+        "label": "Colors",
+        "options": [
+          "theme",
+          "custom",
+          "mono",
+          "category"
+        ],
+        "defaultValue": "theme",
+        "description": "Follow theme matches your bar. My color uses the accent below. Monochrome removes every hue. By category tints each category differently."
+      },
+      {
+        "key": "accentColor",
+        "type": "string",
+        "label": "My accent color",
+        "defaultValue": "#ff6a1f",
+        "description": "Pick one, or type a hex like #ff6a1f."
+      },
+      {
+        "key": "cardStyle",
+        "type": "enum",
+        "label": "Card style",
+        "options": [
+          "soft",
+          "outline",
+          "flat"
+        ],
+        "defaultValue": "soft",
+        "description": "Soft fills cards lightly, outline draws a border only, flat has neither."
+      },
+      {
+        "key": "density",
+        "type": "enum",
+        "label": "Spacing",
+        "options": [
+          "compact",
+          "comfortable",
+          "spacious"
+        ],
+        "defaultValue": "comfortable",
+        "description": "How much air there is between things."
+      },
+      {
+        "key": "cornerRadius",
+        "type": "integer",
+        "label": "Roundness",
+        "min": 0,
+        "max": 20,
+        "step": 2,
+        "defaultValue": 4,
+        "description": "0 is square, 20 is very round."
+      },
+      {
+        "key": "frame",
+        "type": "boolean",
+        "label": "Window outline",
+        "defaultValue": true,
+        "description": "A thin accent-colored outline around the whole manager."
+      },
+      {
+        "key": "fontScale",
+        "type": "integer",
+        "label": "Text size",
+        "min": 80,
+        "max": 150,
+        "step": 5,
+        "defaultValue": 100,
+        "description": "1 is normal, 1.25 is a quarter bigger."
+      },
+      {
+        "key": "surfaceTint",
+        "type": "integer",
+        "label": "Window tint",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 6,
+        "description": "How much of the accent color washes over the window."
+      },
+      {
+        "key": "showPreviews",
+        "type": "boolean",
+        "label": "Show screenshots",
+        "defaultValue": true,
+        "description": "Loads preview images from plugins.omarchy.org. Turn off to stay fully offline for images."
+      },
+      {
+        "key": "windowWidth",
+        "type": "integer",
+        "label": "Window width",
+        "min": 640,
+        "max": 1600,
+        "step": 20,
+        "defaultValue": 1040,
+        "description": "How wide the manager opens."
+      },
+      {
+        "key": "windowHeight",
+        "type": "integer",
+        "label": "Window height",
+        "min": 420,
+        "max": 1100,
+        "step": 20,
+        "defaultValue": 700,
+        "description": "How tall the manager opens."
+      },
+      {
+        "key": "openAs",
+        "type": "enum",
+        "label": "Open as",
+        "options": [
+          "panel",
+          "window"
+        ],
+        "defaultValue": "panel",
+        "description": "Where the bar button opens the manager. You can always pop it out or dock it back from the header."
+      },
+      {
+        "key": "viewMode",
+        "type": "enum",
+        "label": "Layout",
+        "options": [
+          "split",
+          "grid",
+          "list"
+        ],
+        "defaultValue": "split",
+        "description": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most."
+      },
+      {
+        "key": "columns",
+        "type": "enum",
+        "label": "Card columns",
+        "options": [
+          "auto",
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "defaultValue": "auto",
+        "description": "Auto fits as many as the window allows."
+      },
+      {
+        "key": "filtersPanel",
+        "type": "enum",
+        "label": "Filters sidebar",
+        "options": [
+          "left",
+          "hidden"
+        ],
+        "defaultValue": "left",
+        "description": "Hide it for a cleaner look. Search still works."
+      },
+      {
+        "key": "defaultSource",
+        "type": "enum",
+        "label": "Start on",
+        "options": [
+          "community",
+          "builtin",
+          "all"
+        ],
+        "defaultValue": "community",
+        "description": "Which plugins you see first when the window opens."
+      },
+      {
+        "key": "defaultSort",
+        "type": "enum",
+        "label": "Sort by",
+        "options": [
+          "newest",
+          "updated",
+          "fresh",
+          "hearts",
+          "stars",
+          "views",
+          "rated",
+          "az"
+        ],
+        "defaultValue": "newest",
+        "description": "Newly uploaded = first listed. Recently upgraded = latest update. New or upgraded = whichever is most recent."
+      },
+      {
+        "key": "recencyScope",
+        "type": "enum",
+        "label": "Recency filter looks at",
+        "options": [
+          "either",
+          "added",
+          "updated"
+        ],
+        "defaultValue": "either",
+        "description": "Used together with the time window below."
+      },
+      {
+        "key": "recencyDays",
+        "type": "enum",
+        "label": "Only show from the last",
+        "options": [
+          "any",
+          "7",
+          "30",
+          "90",
+          "365"
+        ],
+        "defaultValue": "any",
+        "description": "Hide plugins that have not been uploaded or upgraded recently."
+      },
+      {
+        "key": "verifiedOnly",
+        "type": "boolean",
+        "label": "Verified only",
+        "defaultValue": false,
+        "description": "Hide plugins without the Verified badge."
+      },
+      {
+        "key": "hideInstalled",
+        "type": "boolean",
+        "label": "Hide installed",
+        "defaultValue": false,
+        "description": "Keep plugins you already have out of Browse."
+      },
+      {
+        "key": "showCounts",
+        "type": "boolean",
+        "label": "Show counts",
+        "defaultValue": true,
+        "description": "Numbers next to categories and tags."
+      },
+      {
+        "key": "newBadgeDays",
+        "type": "integer",
+        "label": "Call it New for",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 14,
+        "description": "Days a plugin keeps its New badge after upload."
+      },
+      {
+        "key": "catalogUrl",
+        "type": "string",
+        "label": "Catalog address",
+        "defaultValue": "https://plugins.omarchy.org/catalog.json",
+        "description": "Where the plugin list comes from. Must start with https://."
+      },
+      {
+        "key": "refreshHours",
+        "type": "integer",
+        "label": "Refresh every",
+        "min": 1,
+        "max": 168,
+        "step": 1,
+        "defaultValue": 1,
+        "description": "Hours between automatic checks. An unchanged catalog costs a tiny request, not a full download."
+      },
+      {
+        "key": "refreshOnOpen",
+        "type": "boolean",
+        "label": "Refresh when opened",
+        "defaultValue": true,
+        "description": "Check for a newer catalog every time the window opens. Cheap when nothing changed."
+      },
+      {
+        "key": "checkUpdates",
+        "type": "boolean",
+        "label": "Look for updates",
+        "defaultValue": true,
+        "description": "Compare installed versions with the catalog and show an Updates tab."
+      },
+      {
+        "key": "confirmInstall",
+        "type": "boolean",
+        "label": "Ask before installing",
+        "defaultValue": true,
+        "description": "Plugins run as unsandboxed code in your shell, so a confirmation is shown first."
+      },
+      {
+        "key": "confirmRemove",
+        "type": "boolean",
+        "label": "Ask before removing",
+        "defaultValue": true,
+        "description": "Confirm before a plugin is removed."
+      },
+      {
+        "key": "allowUnverified",
+        "type": "boolean",
+        "label": "Allow unverified plugins",
+        "defaultValue": true,
+        "description": "Off blocks install buttons for anything without the Verified badge."
+      },
+      {
+        "key": "enableAfterInstall",
+        "type": "boolean",
+        "label": "Enable after install",
+        "defaultValue": true,
+        "description": "Turn a plugin on as soon as it is installed."
+      },
+      {
+        "key": "showSecurityNote",
+        "type": "boolean",
+        "label": "Show the security note",
+        "defaultValue": true,
+        "description": "A short reminder in the plugin details."
+      },
+      {
+        "key": "barDisplay",
+        "type": "enum",
+        "label": "Bar button shows",
+        "options": [
+          "icon",
+          "text",
+          "both"
+        ],
+        "defaultValue": "both",
+        "description": "What the button on the bar looks like."
+      },
+      {
+        "key": "barText",
+        "type": "string",
+        "label": "Bar button text",
+        "defaultValue": "Plugins",
+        "description": "Used when text is shown."
+      },
+      {
+        "key": "showBadge",
+        "type": "boolean",
+        "label": "Update badge",
+        "defaultValue": true,
+        "description": "Show how many plugin updates are waiting next to the button."
+      },
+      {
+        "key": "middleClick",
+        "type": "enum",
+        "label": "Middle click",
+        "options": [
+          "refresh",
+          "none"
+        ],
+        "defaultValue": "refresh",
+        "description": "What clicking the bar button with the middle mouse button does."
+      }
+    ]
+  }
+}
