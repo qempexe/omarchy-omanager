@@ -115,8 +115,15 @@ function normalizePlugin(raw, fallbackId) {
     var repoRaw = pick(raw, ["repository.url", "repository", "repo", "repoUrl", "repo_url", "source.url",
                              "source.repository", "source.repo", "github", "url", "homepage"])
     if (repoRaw && typeof repoRaw === "object") repoRaw = pick(repoRaw, ["url", "href"])
-    var added = ts(pick(raw, ["addedAt", "added", "createdAt", "created", "listedAt", "firstSeen",
-                              "publishedAt", "dateAdded", "added_at", "created_at"]))
+    // listedAt is the public listing date the website shows in "RECENTLY ADDED".
+    // It must win over addedAt, which is an internal timestamp that is often
+    // populated for every plugin and would otherwise shadow it.
+    var added = ts(pick(raw, ["listedAt", "listed_at", "listDate", "list_date", "listingDate",
+                              "addedAt", "added", "createdAt", "created", "firstSeen",
+                              "publishedAt", "published_at", "dateAdded", "date_added",
+                              "added_at", "created_at", "submittedAt", "submitted_at",
+                              "listing.createdAt", "listing.addedAt", "listing.date",
+                              "listing.listedAt", "listing.listed_at"]))
     var updated = ts(pick(raw, ["repositoryUpdatedAt", "updatedAt", "updated", "lastUpdated", "modifiedAt", "pushedAt",
                                 "lastCommitAt", "lastCommit.date", "commitDate", "upstream.updatedAt",
                                 "upstream.pushedAt", "updated_at", "pushed_at", "upstreamUpdatedAt",
@@ -331,6 +338,7 @@ function statusOk(p, status, ctx) {
 function sorter(key) {
     var by = function(f, dir) { return function(a, b) { return (f(b) - f(a)) * dir } }
     switch (key) {
+    case "listed": return function(a, b) { return (a._i || 0) - (b._i || 0) }
     case "updated": return by(function(p) { return p.updatedAt }, 1)
     case "fresh": return by(function(p) { return p.fresh }, 1)
     case "hearts": return by(function(p) { return p.hearts }, 1)

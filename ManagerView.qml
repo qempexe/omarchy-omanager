@@ -25,7 +25,7 @@ Item {
     }
 
     function cycleLayout() {
-        var order = ["split", "grid", "list"]
+        var order = ["split", "grid", "list", "compact"]
         ui.setView(order[(order.indexOf(ui.viewMode) + 1) % order.length])
     }
 
@@ -157,7 +157,9 @@ Item {
             Btn {
                 ui: view.ui
                 visible: ui.tabName !== "settings"
-                text: ui.viewMode === "split" ? "\u25E7 Stage" : (ui.viewMode === "grid" ? "\u25A6 Cards" : "\u2630 List")
+                text: ui.viewMode === "split" ? "\u25E7 Stage"
+                    : (ui.viewMode === "grid" ? "\u25A6 Cards"
+                    : (ui.viewMode === "list" ? "\u2630 List" : "\u2263 Compact"))
                 onClicked: view.cycleLayout()
             }
             Btn {

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.qempexe.omanager",
   "name": "Omanager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "qempexe",
   "license": "MIT",
   "description": "Plugin manager for the Omarchy bar: browse, filter, install, update and remove plugins from a window.",
@@ -193,10 +193,11 @@
         "options": [
           "split",
           "grid",
-          "list"
+          "list",
+          "compact"
         ],
         "defaultValue": "split",
-        "description": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most."
+        "description": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most, compact is a dense table-like view for scanning many plugins at once."
       },
       {
         "key": "columns",
@@ -241,6 +242,7 @@
         "label": "Sort by",
         "options": [
           "newest",
+          "listed",
           "updated",
           "fresh",
           "hearts",
@@ -250,7 +252,7 @@
           "az"
         ],
         "defaultValue": "newest",
-        "description": "Newly uploaded = first listed. Recently upgraded = latest update. New or upgraded = whichever is most recent."
+        "description": "Newly uploaded = first listed. As listed = the order the catalog feed returns them in (matches the website's default view). Recently upgraded = latest update. New or upgraded = whichever is most recent."
       },
       {
         "key": "recencyScope",

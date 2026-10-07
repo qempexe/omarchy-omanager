@@ -185,14 +185,16 @@ var groups = [
         "options": [
           "split",
           "grid",
-          "list"
+          "list",
+          "compact"
         ],
         "labels": {
           "split": "List + stage",
           "grid": "Cards",
-          "list": "List"
+          "list": "List",
+          "compact": "Compact"
         },
-        "hint": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most."
+        "hint": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most, compact is a dense table-like view."
       },
       {
         "key": "columns",
@@ -267,6 +269,7 @@ var groups = [
         "fallback": "newest",
         "options": [
           "newest",
+          "listed",
           "updated",
           "fresh",
           "hearts",
@@ -277,6 +280,7 @@ var groups = [
         ],
         "labels": {
           "newest": "Newly uploaded",
+          "listed": "As listed",
           "updated": "Recently upgraded",
           "fresh": "New or upgraded",
           "hearts": "Most hearts",
@@ -285,7 +289,7 @@ var groups = [
           "rated": "Best install rate",
           "az": "A to Z"
         },
-        "hint": "Newly uploaded = first listed. Recently upgraded = latest update. New or upgraded = whichever is most recent."
+        "hint": "Newly uploaded = first listed. As listed = the order the catalog feed returns them in (matches the website's default view). Recently upgraded = latest update. New or upgraded = whichever is most recent."
       },
       {
         "key": "recencyScope",

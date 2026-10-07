@@ -1,19 +1,25 @@
 import QtQuick
 import QtQuick.Layouts
 
-// The scrolling grid / list of plugins, plus the empty / loading / error states.
+// The scrolling grid / list / compact table of plugins, plus the empty /
+// loading / error states.
 Item {
     id: root
 
     property var ui: null
 
-    readonly property bool asList: ui.viewMode !== "grid"
-    readonly property bool shots: !asList && ui.cfgSafe.showPreviews
+    readonly property bool asCompact: ui.viewMode === "compact"
+    readonly property bool asList: !asCompact && ui.viewMode !== "grid"
+    readonly property bool shots: !asList && !asCompact && ui.cfgSafe.showPreviews
     // Auto columns: as many ~300px cards as fit (1 in the docked panel, more in a wide window).
-    readonly property int cols: asList ? 1
+    readonly property int cols: (asList || asCompact) ? 1
         : (ui.cfgSafe.columns === "auto" ? Math.max(1, Math.floor(width / ui.px(300))) : Number(ui.cfgSafe.columns))
     // Screenshot height follows the card width (16:9), capped so wide cards don't get huge.
-    readonly property real shotH: Math.min(ui.px(150), Math.max(ui.px(64), (width / cols - ui.px(10)) * 9 / 16))
+    readonly property real shotH: asCompact ? 0
+        : Math.min(ui.px(150), Math.max(ui.px(64), (width / cols - ui.px(10)) * 9 / 16))
+    // Row height: compact = dense table rows, list = short rows, grid = card+shot.
+    readonly property real rowH: asCompact ? ui.px(30)
+        : (asList ? ui.px(74) : (shots ? shotH + ui.px(188) : ui.px(176)))
 
     function focusGrid() { grid.forceActiveFocus() }
 
@@ -23,7 +29,7 @@ Item {
         clip: true
         model: ui.items
         cellWidth: Math.floor(width / root.cols)
-        cellHeight: root.asList ? ui.px(74) : (root.shots ? root.shotH + ui.px(188) : ui.px(176))
+        cellHeight: root.rowH
         boundsBehavior: Flickable.StopAtBounds
         keyNavigationEnabled: true
         cacheBuffer: 400
@@ -34,6 +40,7 @@ Item {
             ui: root.ui
             p: modelData
             list: root.asList
+            compact: root.asCompact
             shotHeight: root.shotH
             current: ui.selected !== null && ui.selected.id === modelData.id
             onOpened: ui.openDetail(modelData)

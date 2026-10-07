@@ -25,10 +25,11 @@ def S(key, label, default, hint, presets=None, kind="string", when=None):
     return dict(key=key, label=label, kind=kind, fallback=default, hint=hint,
                 presets=presets or [], when=when)
 
-SORTS = ["newest", "updated", "fresh", "hearts", "stars", "views", "rated", "az"]
-SORT_LABELS = {"newest": "Newly uploaded", "updated": "Recently upgraded",
-               "fresh": "New or upgraded", "hearts": "Most hearts", "stars": "Most stars",
-               "views": "Most viewed", "rated": "Best install rate", "az": "A to Z"}
+SORTS = ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "rated", "az"]
+SORT_LABELS = {"newest": "Newly uploaded", "listed": "As listed",
+               "updated": "Recently upgraded", "fresh": "New or upgraded",
+               "hearts": "Most hearts", "stars": "Most stars", "views": "Most viewed",
+               "rated": "Best install rate", "az": "A to Z"}
 
 SPEC = [
   ("Appearance", [
@@ -57,8 +58,9 @@ SPEC = [
     I("windowHeight", "Window height", 700, 420, 1100, 20, "How tall the manager opens."),
     E("openAs", "Open as", "panel", ["panel", "window"], {"panel": "Bar panel", "window": "Own window"},
       "Where the bar button opens the manager. You can always pop it out or dock it back from the header."),
-    E("viewMode", "Layout", "split", ["split", "grid", "list"], {"split": "List + stage", "grid": "Cards", "list": "List"},
-      "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most."),
+    E("viewMode", "Layout", "split", ["split", "grid", "list", "compact"],
+      {"split": "List + stage", "grid": "Cards", "list": "List", "compact": "Compact"},
+      "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most, compact is a dense table-like view."),
     E("columns", "Card columns", "auto", ["auto", "1", "2", "3", "4"],
       {"auto": "Auto", "1": "1", "2": "2", "3": "3", "4": "4"},
       "Auto fits as many as the window allows.", when=[{"key": "viewMode", "is": ["grid"]}]),
@@ -70,7 +72,7 @@ SPEC = [
       {"community": "Community", "builtin": "Built-in", "all": "Everything"},
       "Which plugins you see first when the window opens."),
     E("defaultSort", "Sort by", "newest", SORTS, SORT_LABELS,
-      "Newly uploaded = first listed. Recently upgraded = latest update. New or upgraded = whichever is most recent."),
+      "Newly uploaded = first listed. As listed = the order the catalog feed returns them in (matches the website's default view). Recently upgraded = latest update. New or upgraded = whichever is most recent."),
     E("recencyScope", "Recency filter looks at", "either", ["either", "added", "updated"],
       {"either": "Uploaded or upgraded", "added": "Uploaded", "updated": "Upgraded"},
       "Used together with the time window below.", when=[{"key": "recencyDays", "is": ["7", "30", "90", "365"]}]),
@@ -121,7 +123,7 @@ def manifest_item(it):
 
 def write_manifest():
     m = {
-      "schemaVersion": 1, "id": PLUGIN_ID, "name": "Omanager", "version": "1.0.0",
+      "schemaVersion": 1, "id": PLUGIN_ID, "name": "Omanager", "version": "1.2.0",
       "author": "qempexe", "license": "MIT",
       "description": "Plugin manager for the Omarchy bar: browse, filter, install, update and remove plugins from a window.",
       "kinds": ["service", "bar-widget"], "keepLoaded": True,

@@ -101,6 +101,7 @@ Item {
 
     readonly property var sortOptions: [
         { key: "newest", label: "Newly uploaded" },
+        { key: "listed", label: "As listed" },
         { key: "updated", label: "Recently upgraded" },
         { key: "fresh", label: "New or upgraded" },
         { key: "hearts", label: "Most hearts" },

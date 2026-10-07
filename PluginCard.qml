@@ -2,14 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import "Model.js" as Model
 
-// One plugin, as a card (grid) or a row (list). Everything shown here comes
-// from the catalog and is treated as plain text.
+// One plugin, as a card (grid), a row (list) or a dense table row (compact).
+// Everything shown here comes from the catalog and is treated as plain text.
 Item {
     id: root
 
     property var ui: null
     property var p: null
     property bool list: false
+    property bool compact: false
     property bool current: false
     property real shotHeight: ui.px(150)
     readonly property bool narrow: width < ui.px(230)
@@ -19,14 +20,11 @@ Item {
     readonly property var st: ui.stateOf(p)
     readonly property color tone: ui.tone(p.category)
     readonly property bool isNew: p.addedAt > 0 && (ui.now - p.addedAt) < ui.cfgSafe.newBadgeDays * 86400000
-    readonly property bool showShot: !list && ui.cfgSafe.showPreviews
-    // With a preview photo (loading or loaded) the placeholder letter must not show
-    // through it; the letter only appears when there is no photo or it failed to load.
+    readonly property bool showShot: !list && !compact && ui.cfgSafe.showPreviews
     readonly property bool gridShotShown: showShot && p.preview !== "" && gridImg.status !== Image.Error
     readonly property bool listShotShown: list && ui.cfgSafe.showPreviews && p.preview !== "" && listImg.status !== Image.Error
     readonly property string action: st.update ? "update" : (!st.installed && !p.builtin && p.repo !== "" && p.installable ? "install" : "")
     readonly property bool saved: ui.service && ui.service.bookmarks[p.id] === true
-    // Counters: community plugins always show all four, even at 0.
     readonly property string stats: (p.builtin || p.local) ? "" : [
         "\u2605 " + Model.fmtCount(p.stars), "\u2665 " + Model.fmtCount(p.hearts),
         "\u25CE " + Model.fmtCount(p.views), "\u2750 " + Model.fmtCount(p.copies)
@@ -39,12 +37,15 @@ Item {
     Rectangle {
         id: body
         anchors.fill: parent
-        anchors.margins: ui.px(5)
-        radius: ui.radius
+        anchors.margins: root.compact ? 0 : ui.px(5)
+        radius: root.compact ? 0 : ui.radius
         clip: true
-        color: ui.cardStyle === "soft" ? ui.tint(area.containsMouse ? 0.09 : 0.045) : (area.containsMouse ? ui.tint(0.04) : "transparent")
-        border.width: root.current ? 2 : (ui.cardStyle === "flat" ? 0 : 1)
-        border.color: root.current ? ui.accent : ui.tint(area.containsMouse ? 0.25 : 0.10)
+        color: root.compact
+            ? (area.containsMouse ? ui.tint(0.08) : "transparent")
+            : (ui.cardStyle === "soft" ? ui.tint(area.containsMouse ? 0.09 : 0.045) : (area.containsMouse ? ui.tint(0.04) : "transparent"))
+        border.width: root.compact ? 0 : (root.current ? 2 : (ui.cardStyle === "flat" ? 0 : 1))
+        border.color: root.compact ? "transparent"
+            : (root.current ? ui.accent : ui.tint(area.containsMouse ? 0.25 : 0.10))
         Behavior on color { enabled: ui.animations; ColorAnimation { duration: 100 } }
 
         MouseArea {
@@ -57,7 +58,7 @@ Item {
 
         // ---------- grid layout ----------
         ColumnLayout {
-            visible: !root.list
+            visible: !root.list && !root.compact
             anchors.fill: parent
             spacing: 0
 
@@ -213,7 +214,7 @@ Item {
 
         // ---------- list layout (also the left column of "List + stage") ----------
         RowLayout {
-            visible: root.list
+            visible: root.list && !root.compact
             anchors.fill: parent
             anchors.margins: ui.px(8)
             spacing: ui.px(10)
@@ -305,6 +306,140 @@ Item {
                     onClicked: ui.service.toggleBookmark(p.id)
                 }
             }
+        }
+
+        // ---------- compact layout (dense table row) ----------
+        RowLayout {
+            visible: root.compact
+            anchors.fill: parent
+            anchors.leftMargin: ui.px(8)
+            anchors.rightMargin: ui.px(8)
+            spacing: ui.px(8)
+
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                width: ui.px(6); height: width; radius: width / 2
+                color: root.tone
+            }
+
+            Txt {
+                ui: root.ui
+                Layout.fillWidth: true
+                Layout.minimumWidth: ui.px(60)
+                text: p.name
+                font.pixelSize: ui.fs(11)
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.width > ui.px(360)
+                Layout.preferredWidth: ui.px(80)
+                text: p.category
+                font.pixelSize: ui.fs(10)
+                opacity: 0.55
+                elide: Text.ElideRight
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.width > ui.px(500)
+                Layout.preferredWidth: ui.px(90)
+                text: p.author !== "" ? "by " + p.author : ""
+                font.pixelSize: ui.fs(10)
+                opacity: 0.55
+                elide: Text.ElideRight
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.width > ui.px(700)
+                Layout.preferredWidth: ui.px(160)
+                text: root.stats
+                font.pixelSize: ui.fs(9)
+                opacity: 0.6
+                elide: Text.ElideRight
+            }
+
+            Txt {
+                ui: root.ui
+                visible: p.verified
+                text: "\u2713"
+                color: ui.good
+                font.pixelSize: ui.fs(11)
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.isNew
+                text: "NEW"
+                color: ui.accent
+                font.pixelSize: ui.fs(9)
+                font.weight: Font.Bold
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.st.update
+                text: "UPDATE"
+                color: ui.warn
+                font.pixelSize: ui.fs(9)
+                font.weight: Font.Bold
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.st.installed
+                text: root.st.enabled ? "\u25CF" : "\u25CB"
+                color: root.st.enabled ? ui.good : ui.fg
+                font.pixelSize: ui.fs(10)
+                opacity: 0.8
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.width > ui.px(500)
+                Layout.preferredWidth: ui.px(74)
+                text: root.when
+                font.pixelSize: ui.fs(9)
+                opacity: 0.5
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+            }
+
+            Txt {
+                ui: root.ui
+                text: root.saved ? "\u2605" : "\u2606"
+                color: root.saved ? ui.accent : ui.fg
+                opacity: root.saved ? 1 : 0.4
+                font.pixelSize: ui.fs(13)
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -4
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: ui.service.toggleBookmark(p.id)
+                }
+            }
+
+            Btn {
+                ui: root.ui
+                visible: root.action !== "" && !(ui.service && ui.service.busyIds[p.id])
+                kind: "primary"
+                text: root.action === "update" ? "Update" : "Install"
+                implicitHeight: ui.px(20)
+                implicitWidth: ui.px(58)
+                onClicked: ui.requestAction(root.action, p)
+            }
+        }
+
+        // thin separator between compact rows
+        Rectangle {
+            visible: root.compact
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: ui.tint(0.06)
         }
     }
 }
