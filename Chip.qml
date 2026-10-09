@@ -35,6 +35,7 @@ Rectangle {
         Txt {
             ui: root.ui
             text: root.label
+            color: root.on ? ui.onText(root.tone) : ui.fg
             font.pixelSize: ui.fs(11)
             font.weight: root.on ? Font.DemiBold : Font.Normal
             opacity: root.on ? 1.0 : 0.8

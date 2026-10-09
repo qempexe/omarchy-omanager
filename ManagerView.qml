@@ -43,6 +43,11 @@ Item {
     }
 
     // ---- chrome ----------------------------------------------------------------
+    Rectangle {   // opaque base: the same surface in the panel and the pop-out window
+        anchors.fill: parent
+        radius: ui.radius
+        color: ui.surface
+    }
     Rectangle {   // accent wash
         anchors.fill: parent
         radius: ui.radius

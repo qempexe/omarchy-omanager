@@ -148,6 +148,15 @@ python3 tests/test_manifest.py  # manifest / Schema.js / QML drift, plain-text r
 
 ## Changelog
 
+### 1.2.0
+
+- **Pop-out matches the bar.** The pop-out window and the bar panel now paint the same opaque surface, taken from the bar's own background colour. Before, the pop-out used a neutral grey derived from the foreground, so the two looked different.
+- **Colors that read on any bar.** Text falls back to black or white when the bar's foreground is too close to its background.
+- **Status colours on light themes.** Verified, update, and warning colours use darker variants on light surfaces. Before, the pastel versions were hard to read.
+- **Selected chips and tabs.** Labels pick black or white against the fill, so they stay readable with any accent colour, including light custom colours.
+- **By category** picks tone lightness from the actual surface, so the hues stay legible on light and dark bars.
+- **Monochrome** is truly grey. Surfaces and text use only black, white and greys, with no tint from the bar's colours.
+
 ### 1.1.0
 
 - Fixed **"Newly uploaded"**: the listing date (`listedAt`) is now preferred over the internal `addedAt` timestamp, so the ordering matches the website's **RECENTLY ADDED** view.

@@ -157,6 +157,12 @@ BarWidget {
     property bool popped: false
     property bool modeChosen: false
 
+    // The bar's own colours. Fall back to the shell palette if the bar does not expose them.
+    readonly property color barFg: (root.bar && root.bar.barForeground !== undefined)
+        ? root.bar.barForeground : (Color.foreground !== undefined ? Color.foreground : "white")
+    readonly property color barBg: (root.bar && root.bar.barBackground !== undefined)
+        ? root.bar.barBackground : (Color.background !== undefined ? Color.background : "#121217")
+
     UiState {
         id: ux
         service: root.service
@@ -164,7 +170,8 @@ BarWidget {
         cfg: root.cfg
         opened: root.panelOpened || root.windowShown
         popped: root.popped
-        fg: root.bar ? root.bar.barForeground : Color.foreground
+        barFg: root.barFg
+        barBg: root.barBg
         fontName: root.bar ? root.bar.fontFamily : Style.font.family
         onPopOutRequested: root.popOut()
         onDockRequested: root.dock()

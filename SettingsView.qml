@@ -81,6 +81,7 @@ Item {
                         anchors.left: parent.left
                         anchors.leftMargin: ui.px(12)
                         text: modelData.title
+                        color: parent.on ? ui.onText(ui.accent) : ui.fg
                         font.pixelSize: ui.fs(12)
                         font.weight: parent.on ? Font.DemiBold : Font.Normal
                     }

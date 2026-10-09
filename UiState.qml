@@ -33,10 +33,31 @@ Item {
         confirmInstall: true, confirmRemove: true, allowUnverified: true, showSecurityNote: true
     })
 
-    property color fg: "white"
-    readonly property real lum: 0.299 * fg.r + 0.587 * fg.g + 0.114 * fg.b
+    // Colours handed in by BarWidget: the bar's own foreground and background.
+    property color barFg: "white"
+    property color barBg: "#121217"
+
+    function lumOf(c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b }
+    // Black or white, whichever reads better on colour c.
+    function contrast(c) {
+        return lumOf(c) > 0.5 ? Qt.rgba(0.08, 0.08, 0.08, 1) : Qt.rgba(0.96, 0.96, 0.96, 1)
+    }
+    function grey(l) { return Qt.rgba(l, l, l, 1) }
+
+    // The opaque base every surface paints. It is the bar's real background, so the
+    // bar panel and the pop-out window show the same colour (it used to be a neutral
+    // grey derived from the foreground, which is why the two looked different).
+    // Monochrome drops every hue: the surface becomes a grey at the bar's brightness.
+    readonly property color barSurface: Qt.rgba(barBg.r, barBg.g, barBg.b, 1)
+    readonly property color surface: mono ? grey(lumOf(barSurface)) : barSurface
+    readonly property bool lightSurface: lumOf(surface) > 0.5
+    // Text has to read against the surface. If the bar's foreground is too close to
+    // its background, fall back to black or white.
+    // Monochrome text is pure white or black, never a tinted foreground.
+    readonly property color fg: mono ? contrast(surface)
+        : (Math.abs(lumOf(barFg) - lumOf(surface)) >= 0.35 ? barFg : contrast(surface))
+    readonly property real lum: lumOf(fg)
     readonly property bool lightText: lum > 0.5
-    readonly property color surface: lightText ? Qt.rgba(0.07, 0.07, 0.09, 1) : Qt.rgba(0.97, 0.97, 0.98, 1)
     // The layout (List + stage / Cards / List) is live UI state: it changes the
     // instant it is chosen, and is saved right after. It never waits on the
     // settings file, `omarchy bar set` or the settings object being rebuilt.
@@ -52,15 +73,15 @@ Item {
     readonly property color accent: cfgSafe.colorMode === "custom"
         ? Qt.color(Model.validHex(cfgSafe.accentColor, "#ff6a1f")) : fg
     readonly property real accLum: 0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b
-    // Readable label colour for text sitting on a filled shape of colour `c`.
-    function contrast(c) {
-        var l = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
-        return l > 0.5 ? Qt.rgba(0.07, 0.07, 0.09, 1) : Qt.rgba(0.97, 0.97, 0.98, 1)
-    }
     readonly property color accentText: contrast(accent)
-    readonly property color good: mono ? fg : Qt.rgba(0.48, 0.85, 0.56, 1)
-    readonly property color warn: mono ? fg : Qt.rgba(0.94, 0.71, 0.30, 1)
-    readonly property color bad: mono ? fg : Qt.rgba(0.97, 0.46, 0.56, 1)
+    // Status colours: the pastels used on dark bars vanish on light ones, so pick
+    // darker variants for light surfaces. Monochrome removes hues altogether.
+    readonly property color good: mono ? fg
+        : (lightSurface ? Qt.rgba(0.14, 0.50, 0.26, 1) : Qt.rgba(0.48, 0.85, 0.56, 1))
+    readonly property color warn: mono ? fg
+        : (lightSurface ? Qt.rgba(0.62, 0.40, 0.02, 1) : Qt.rgba(0.94, 0.71, 0.30, 1))
+    readonly property color bad: mono ? fg
+        : (lightSurface ? Qt.rgba(0.74, 0.16, 0.26, 1) : Qt.rgba(0.97, 0.46, 0.56, 1))
     readonly property color warnText: contrast(warn)
     property string fontName: ""
     readonly property string cardStyle: cfgSafe.cardStyle
@@ -68,6 +89,14 @@ Item {
     readonly property bool animations: true
 
     function tint(a) { return Qt.rgba(fg.r, fg.g, fg.b, a) }
+
+    // Label colour for text on an "on" chip or tab filled with colour `c` (the fill is
+    // c at 22% over the surface). Works for any accent, light or dark.
+    function onFill(c) {
+        return Qt.rgba(surface.r * 0.78 + c.r * 0.22, surface.g * 0.78 + c.g * 0.22,
+                       surface.b * 0.78 + c.b * 0.22, 1)
+    }
+    function onText(c) { return contrast(onFill(c)) }
     function accentTint(a) { return Qt.rgba(accent.r, accent.g, accent.b, a) }
     function fs(n) { return Math.round(n * cfgSafe.fontScale / 100) }
     function px(n) {
@@ -77,7 +106,7 @@ Item {
     // Category color: hue per category in "By category" mode, otherwise the accent.
     function tone(category) {
         if (cfgSafe.colorMode === "category")
-            return Qt.hsla(Model.hueOf(category), 0.55, lightText ? 0.68 : 0.38, 1)
+            return Qt.hsla(Model.hueOf(category), 0.55, lightSurface ? 0.38 : 0.68, 1)
         return accent
     }
 

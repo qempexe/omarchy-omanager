@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.qempexe.omanager",
   "name": "Omanager",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "qempexe",
   "license": "MIT",
   "description": "Plugin manager for the Omarchy bar: browse, filter, install, update and remove plugins from a window.",
@@ -197,7 +197,7 @@
           "compact"
         ],
         "defaultValue": "split",
-        "description": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most, compact is a dense table-like view for scanning many plugins at once."
+        "description": "List + stage keeps a big preview of the selected plugin beside the list. Cards show screenshots, list fits the most, compact is a dense table-like view."
       },
       {
         "key": "columns",
