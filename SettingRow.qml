@@ -19,6 +19,14 @@ Item {
     property var labels: ({})
     property var presets: []
     property var value: null
+
+    // What the control shows. A choice is shown the moment it is made, so the control
+    // never waits for the settings round trip; it follows the real value again as soon
+    // as the parent hands it back.
+    property var optimistic: undefined
+    readonly property var current: optimistic !== undefined ? optimistic : value
+    onValueChanged: optimistic = undefined
+    function commit(v) { optimistic = v; edited(v) }
     property var defaultValue: null
     property real min: 0
     property real max: 100
@@ -26,6 +34,7 @@ Item {
     property real divisor: 1
     property int decimals: 0
     property bool dimmed: false
+    property bool locked: false        // shown, but has no effect right now and ignores input
 
     signal edited(var v)
 
@@ -37,21 +46,22 @@ Item {
         return isFinite(n) ? String(parseFloat(n.toFixed(decimals))) : "?"
     }
     function nudge(dir) {
-        var cur = Number(value)
+        var cur = Number(current)
         var v = Math.max(min, Math.min(max, cur + dir * step))
-        if (v !== cur) edited(v)
+        if (v !== cur) commit(v)
     }
     function validHex(s) { return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s) }
 
-    readonly property bool boolValue: value === true || value === "true"
-    readonly property bool atDefault: same(value, defaultValue)
+    readonly property bool boolValue: current === true || current === "true"
+    readonly property bool atDefault: same(current, defaultValue)
     readonly property real span: Math.max(1e-9, max - min)
-    readonly property real frac: Math.max(0, Math.min(1, (Number(value) - min) / span))
+    readonly property real frac: Math.max(0, Math.min(1, (Number(current) - min) / span))
     readonly property real defFrac: Math.max(0, Math.min(1, (Number(defaultValue) - min) / span))
 
     implicitWidth: 400
     implicitHeight: col.implicitHeight
-    opacity: dimmed ? 0.4 : 1.0
+    opacity: (dimmed || locked) ? 0.4 : 1.0
+    enabled: !locked
     Behavior on opacity { enabled: ui.animations; NumberAnimation { duration: 140 } }
 
     ColumnLayout {
@@ -88,7 +98,7 @@ Item {
             Txt {
                 ui: root.ui
                 visible: root.kind === "int"
-                text: root.show(root.value)
+                text: root.show(root.current)
                 font.pixelSize: ui.fs(12)
                 font.weight: Font.DemiBold
             }
@@ -105,7 +115,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.edited(root.defaultValue)
+                    onClicked: root.commit(root.defaultValue)
                 }
             }
 
@@ -125,7 +135,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.edited(!root.boolValue)
+                    onClicked: root.commit(!root.boolValue)
                 }
             }
         }
@@ -140,8 +150,8 @@ Item {
                 delegate: Chip {
                     ui: root.ui
                     label: root.labelFor(modelData)
-                    on: root.same(root.value, modelData)
-                    onClicked: root.edited(modelData)
+                    on: root.same(root.current, modelData)
+                    onClicked: root.commit(modelData)
                 }
             }
         }
@@ -191,7 +201,7 @@ Item {
                         var raw = root.min + f * root.span
                         var snapped = root.min + Math.round((raw - root.min) / root.step) * root.step
                         snapped = Math.max(root.min, Math.min(root.max, snapped))
-                        if (snapped !== Number(root.value)) root.edited(snapped)
+                        if (snapped !== Number(root.current)) root.commit(snapped)
                     }
                     onPressed: function(m) { apply(m.x) }
                     onPositionChanged: function(m) { if (pressed) apply(m.x) }
@@ -223,14 +233,14 @@ Item {
                 selectedTextColor: ui.accentText
                 font.family: ui.fontName
                 font.pixelSize: ui.fs(12)
-                text: root.str(root.value)
+                text: root.str(root.current)
                 maximumLength: 2048
                 selectByMouse: true
                 onEditingFinished: {
-                    if (root.kind === "color" && !root.validHex(text)) { text = root.str(root.value); return }
-                    if (text !== root.str(root.value)) root.edited(text)
+                    if (root.kind === "color" && !root.validHex(text)) { text = root.str(root.current); return }
+                    if (text !== root.str(root.current)) root.commit(text)
                 }
-                Keys.onEscapePressed: { text = root.str(root.value); focus = false }
+                Keys.onEscapePressed: { text = root.str(root.current); focus = false }
             }
         }
 
@@ -244,8 +254,8 @@ Item {
                 delegate: Chip {
                     ui: root.ui
                     label: String(modelData).trim() === "" ? "(none)" : String(modelData)
-                    on: root.same(root.value, modelData)
-                    onClicked: root.edited(modelData)
+                    on: root.same(root.current, modelData)
+                    onClicked: root.commit(modelData)
                 }
             }
         }
@@ -260,12 +270,12 @@ Item {
                 delegate: Rectangle {
                     width: ui.px(24); height: width; radius: width / 2
                     color: modelData
-                    border.width: root.same(root.value, modelData) ? 2 : 1
-                    border.color: root.same(root.value, modelData) ? ui.fg : ui.tint(0.25)
+                    border.width: root.same(root.current, modelData) ? 2 : 1
+                    border.color: root.same(root.current, modelData) ? ui.fg : ui.tint(0.25)
                     MouseArea {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.edited(modelData)
+                        onClicked: root.commit(modelData)
                     }
                 }
             }

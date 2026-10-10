@@ -19,10 +19,10 @@ Item {
 
     readonly property var st: ui.stateOf(p)
     readonly property color tone: ui.tone(p.category)
-    readonly property bool isNew: p.addedAt > 0 && (ui.now - p.addedAt) < ui.cfgSafe.newBadgeDays * 86400000
-    readonly property bool showShot: !list && !compact && ui.cfgSafe.showPreviews
+    readonly property bool isNew: p.addedAt > 0 && (ui.now - p.addedAt) < ui.newBadgeDays * 86400000
+    readonly property bool showShot: !list && !compact && ui.showPreviews
     readonly property bool gridShotShown: showShot && p.preview !== "" && gridImg.status !== Image.Error
-    readonly property bool listShotShown: list && ui.cfgSafe.showPreviews && p.preview !== "" && listImg.status !== Image.Error
+    readonly property bool listShotShown: list && ui.showPreviews && p.preview !== "" && listImg.status !== Image.Error
     readonly property string action: st.update ? "update" : (!st.installed && !p.builtin && p.repo !== "" && p.installable ? "install" : "")
     readonly property bool saved: ui.service && ui.service.bookmarks[p.id] === true
     readonly property string stats: (p.builtin || p.local) ? "" : [
@@ -79,7 +79,7 @@ Item {
                     sourceSize.width: 480
                     sourceSize.height: 270
                     visible: status === Image.Ready
-                    opacity: ui.cfgSafe.colorMode === "mono" ? 0.85 : 1.0
+                    opacity: ui.mono ? 0.85 : 1.0
                 }
                 Txt {
                     ui: root.ui
@@ -229,7 +229,7 @@ Item {
                 Image {
                     id: listImg
                     anchors.fill: parent
-                    source: (root.list && ui.cfgSafe.showPreviews) ? p.preview : ""
+                    source: (root.list && ui.showPreviews) ? p.preview : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true

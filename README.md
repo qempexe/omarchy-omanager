@@ -108,7 +108,7 @@ Without rules it still works; it just tiles like any other window.
 
 Everything is in the window's **Settings** tab (or by right-clicking the bar button).
 
-Each change is applied instantly, saved locally, and mirrored to `omarchy bar set`.
+Each change is applied instantly and saved locally, in `settings.json` in your state folder. Omanager never runs `omarchy bar set`, so an edit does not make Omarchy reload the bar. Omarchy's own settings UI does not show these values.
 
 The list lives in `tools/gen.py`. Edit it, run:
 
@@ -147,6 +147,14 @@ python3 tests/test_manifest.py  # manifest / Schema.js / QML drift, plain-text r
 ```
 
 ## Changelog
+
+### 1.3.0
+
+- **Window size is locked in pop-out mode.** `windowWidth` and `windowHeight` are shown dimmed with a note while the manager is popped out, because the window manager sizes that window. They take effect again once you dock it.
+- **Settings changes stop re-rendering every card.** Cards and the stage read narrow settings (density, text size, previews, colour mode) instead of the whole settings object, so changing one setting only updates what it affects.
+- **Catalog parsing stays on the UI thread for now.** A background-worker version crash-looped the shell on startup and was reverted. The cause is not yet confirmed.
+- **Settings stick on the first click.** The control shows a choice the moment it is made, and `settings.json` has a single writer: it is read once at startup and never watched, so a stale read can't undo a newer value. Before, a setting could snap back or need a second press.
+- **Settings apply instantly without freezing.** Edits take effect on the spot in both the bar panel and the pop-out window. Settings are no longer mirrored to `omarchy bar set`, because each call made Omarchy reload the bar. Values are kept in `settings.json`, which is the source of truth.
 
 ### 1.2.0
 

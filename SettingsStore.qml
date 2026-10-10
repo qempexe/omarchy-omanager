@@ -2,9 +2,15 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Local overrides for widget settings. Every write is also pushed to
-// `omarchy bar set`, so the change survives a restart and shows up in
-// Omarchy's own settings UI. Local overrides win over setting(...).
+// Local overrides for widget settings. Every change is applied on the spot and
+// saved to settings.json in the state folder. Local overrides win over setting(...).
+//
+// Nothing here runs `omarchy bar set`: that makes Omarchy reload the bar config,
+// which froze the shell. settings.json is the source of truth.
+//
+// This store is the only writer. The file is read once, at startup, and merged
+// under anything already changed in memory. It is not watched, so a write can
+// never be read back and undo a newer value.
 Item {
     id: root
 
@@ -14,7 +20,8 @@ Item {
     property string path: stateDir + "/settings.json"
 
     property var values: ({})
-    property bool loaded: false
+    property bool loaded: false        // the saved file has been read (or there is none)
+    property bool dirReady: false      // the state folder exists, so writes can land
 
     signal changed()
 
@@ -30,7 +37,6 @@ Item {
         else next[key] = value
         values = next
         persist()
-        pushToOmarchy(key, value)
         changed()
     }
 
@@ -40,20 +46,14 @@ Item {
         changed()
     }
 
-    // Back to the given defaults. Pushed to omarchy too, otherwise the values
-    // it already holds from earlier edits would simply show through again.
+    // Back to the given defaults, in one write.
     function resetAll(defaults) {
         var next = {}
-        for (var k in defaults) {
-            next[k] = defaults[k]
-            pushToOmarchy(k, defaults[k])
-        }
+        for (var k in defaults) next[k] = defaults[k]
         values = next
         persist()
         changed()
     }
-
-    property double lastWrite: 0
 
     // Written shortly after the last change (a slider drag is one write, not fifty).
     function persist() { writeTimer.restart() }
@@ -61,47 +61,32 @@ Item {
     Timer {
         id: writeTimer
         interval: 150
-        onTriggered: {
-            root.lastWrite = Date.now()
-            file.setText(JSON.stringify(root.values, null, 2) + "\n")
-        }
+        onTriggered: root.flushWrite()
     }
 
-    // `omarchy bar set` calls are queued (one process at a time, newest value
-    // per key wins) so rapid changes, like dragging a slider or resetting
-    // everything, are never dropped.
-    property var queue: []
-
-    function pushToOmarchy(key, value) {
-        if (!key || value === null || value === undefined) return
-        var text = (typeof value === "boolean") ? (value ? "true" : "false") : String(value)
-        var q = queue.filter(function(e) { return e.key !== key })
-        q.push({ key: key, text: text })
-        queue = q
-        drain()
+    // Never writes before the saved file has been read, so an early edit can't
+    // overwrite settings that are still on disk.
+    function flushWrite() {
+        if (!dirReady || !loaded) { writeTimer.restart(); return }
+        file.setText(JSON.stringify(root.values, null, 2) + "\n")
     }
 
-    function drain() {
-        if (setter.running || queue.length === 0) return
-        var e = queue[0]
-        queue = queue.slice(1)
-        setter.command = ["omarchy", "bar", "set", pluginId, e.key, e.text]
-        setter.running = true
-    }
-
+    // Startup read: the file's values, with anything changed in memory on top.
     function absorb(text) {
-        var next
+        if (loaded) return
+        var fromFile
         try {
             var parsed = JSON.parse(String(text || "{}"))
-            next = (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-                ? parsed : ({})
+            fromFile = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : ({})
         } catch (e) {
-            next = ({})
+            fromFile = ({})
         }
-        // Same content as we already hold (e.g. our own write coming back):
-        // keep the current object so nothing downstream re-evaluates.
-        if (JSON.stringify(next) !== JSON.stringify(values)) values = next
-        if (!loaded) loaded = true
+        var merged = {}
+        for (var k in fromFile) merged[k] = fromFile[k]
+        for (var j in values) merged[j] = values[j]
+        values = merged
+        loaded = true
+        if (writeTimer.running) return
     }
 
     Component.onCompleted: mkdir.running = true
@@ -109,17 +94,16 @@ Item {
     Process {
         id: mkdir
         command: ["mkdir", "-p", root.stateDir]
-        onExited: file.reload()
+        onExited: {
+            root.dirReady = true
+            if (!root.loaded) file.reload()
+        }
     }
-
-    Process { id: setter; running: false; onExited: root.drain() }
 
     FileView {
         id: file
         path: root.path
-        watchChanges: true
-        onFileChanged: if (Date.now() - root.lastWrite > 1000 && !writeTimer.running) reload()
-        onTextChanged: root.absorb(text)
         onLoaded: root.absorb(text)
+        onLoadFailed: { if (!root.loaded) root.loaded = true }
     }
 }

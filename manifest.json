@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.qempexe.omanager",
   "name": "Omanager",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "qempexe",
   "license": "MIT",
   "description": "Plugin manager for the Omarchy bar: browse, filter, install, update and remove plugins from a window.",

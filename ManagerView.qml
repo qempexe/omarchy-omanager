@@ -51,13 +51,13 @@ Item {
     Rectangle {   // accent wash
         anchors.fill: parent
         radius: ui.radius
-        color: ui.accentTint(ui.cfgSafe.surfaceTint / 100)
+        color: ui.accentTint(ui.tintPct / 100)
     }
     Rectangle {   // thin outline
         anchors.fill: parent
         radius: ui.radius
         color: "transparent"
-        border.width: ui.cfgSafe.frame ? 1 : 0
+        border.width: ui.frameOn ? 1 : 0
         border.color: ui.accent
         opacity: 0.8
     }
@@ -272,12 +272,12 @@ Item {
 
                 FilterSidebar {
                     ui: view.ui
-                    visible: ui.cfgSafe.filtersPanel === "left"
+                    visible: ui.filtersPanelKey === "left"
                     Layout.preferredWidth: ui.px(214)
                     Layout.fillHeight: true
                 }
                 Rectangle {
-                    visible: ui.cfgSafe.filtersPanel === "left"
+                    visible: ui.filtersPanelKey === "left"
                     Layout.fillHeight: true
                     implicitWidth: 1
                     color: ui.tint(0.10)
