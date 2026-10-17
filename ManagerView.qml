@@ -22,9 +22,12 @@ Item {
     // what the layout really is right now ("List + stage" needs room)
     readonly property string mode: (ui.viewMode === "split" && !wide) ? "list" : ui.viewMode
     readonly property bool split: mode === "split"
+    // tabs that show the plugin list (not Settings, not Sets)
+    readonly property bool listTab: ui.tabName !== "settings" && ui.tabName !== "sets"
 
     // Esc steps back out of whatever is covering things. True when it did something.
     function stepBack() {
+        if (ui.menu) { ui.closeMenu(); return true }
         if (ui.confirm) { ui.confirm = null; return true }
         if (ui.selected && !split) { ui.selected = null; return true }
         if (filtersOpen) { filtersOpen = false; return true }
@@ -211,6 +214,7 @@ Item {
                         { key: "installed", label: "Installed", n: ui.service ? ui.service.installed.length : 0 },
                         { key: "updates", label: "Updates", n: ui.service ? ui.service.updateCount : 0 },
                         { key: "saved", label: "Saved", n: ui.service ? Object.keys(ui.service.bookmarks).length : 0 },
+                        { key: "sets", label: "Sets", n: ui.service ? ui.service.sets.length : 0 },
                         { key: "settings", label: "Settings", n: -1 }
                     ]
                     delegate: Item {
@@ -346,19 +350,50 @@ Item {
 
                         Btn {
                             ui: view.ui
-                            visible: ui.tabName !== "settings" && view.filtersAllowed && !view.wide
+                            visible: view.listTab && view.filtersAllowed && !view.wide
                             active: view.filtersOpen
                             text: ui.filtersActive ? "Filters \u2022" : "Filters"
                             onClicked: view.filtersOpen = !view.filtersOpen
                         }
                         Btn {
                             ui: view.ui
-                            visible: ui.tabName !== "settings"
+                            visible: view.listTab
                             text: view.mode === "split" ? "\u25E7 Stage"
                                 : (view.mode === "grid" ? "\u25A6 Cards"
                                 : (view.mode === "list" ? "\u2630 List" : "\u2263 Compact"))
                             onClicked: view.cycleLayout()
                         }
+                        Btn {
+                            ui: view.ui
+                            visible: view.listTab
+                            active: ui.selectMode
+                            text: ui.selectMode ? "Done" : "Select"
+                            onClicked: ui.setSelectMode(!ui.selectMode)
+                        }
+                    }
+
+                    // ---- batch action bar: appears while selecting ----
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: ui.selectMode
+                        spacing: ui.px(6)
+
+                        Txt {
+                            ui: view.ui
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: ui.selCount === 0 ? "Pick plugins to act on"
+                                : ui.selCount + (ui.selCount === 1 ? " selected" : " selected")
+                            font.pixelSize: ui.fs(11)
+                            opacity: 0.7
+                        }
+                        Btn { ui: view.ui; text: "All"; onClicked: ui.selectAllVisible() }
+                        Btn { ui: view.ui; text: "None"; visible: ui.selCount > 0; onClicked: ui.clearSelection() }
+                        Btn { ui: view.ui; kind: "primary"; text: "Update"; visible: ui.selCount > 0; enabled: ui.selectedFor("update").length > 0; onClicked: ui.requestBatch("update") }
+                        Btn { ui: view.ui; text: "Enable"; visible: ui.selCount > 0; enabled: ui.selectedFor("enable").length > 0; onClicked: ui.requestBatch("enable") }
+                        Btn { ui: view.ui; text: "Disable"; visible: ui.selCount > 0; enabled: ui.selectedFor("disable").length > 0; onClicked: ui.requestBatch("disable") }
+                        Btn { ui: view.ui; text: "Save"; visible: ui.selCount > 0; enabled: ui.selectedFor("save").length > 0; onClicked: ui.requestBatch("save") }
+                        Btn { ui: view.ui; kind: "danger"; text: "Remove"; visible: ui.selCount > 0; enabled: ui.selectedFor("remove").length > 0; onClicked: ui.requestBatch("remove") }
                     }
 
                     Item {
@@ -369,7 +404,7 @@ Item {
                         RowLayout {
                             anchors.fill: parent
                             spacing: ui.px(12)
-                            visible: ui.tabName !== "settings"
+                            visible: view.listTab
 
                             FilterSidebar {
                                 ui: view.ui
@@ -422,9 +457,15 @@ Item {
                             visible: ui.tabName === "settings"
                         }
 
+                        SetsView {
+                            ui: view.ui
+                            anchors.fill: parent
+                            visible: ui.tabName === "sets"
+                        }
+
                         // filters drawer (narrow windows)
                         Rectangle {
-                            visible: view.filtersOpen && !view.wide && view.filtersAllowed && ui.tabName !== "settings"
+                            visible: view.filtersOpen && !view.wide && view.filtersAllowed && view.listTab
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             anchors.left: parent.left
@@ -445,7 +486,7 @@ Item {
                         DetailPane {
                             ui: view.ui
                             p: ui.selected
-                            visible: !view.split && ui.selected !== null && ui.tabName !== "settings"
+                            visible: !view.split && ui.selected !== null && view.listTab
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             anchors.right: parent.right
@@ -508,7 +549,7 @@ Item {
                 elide: Text.ElideRight
                 font.pixelSize: ui.fs(10)
                 opacity: 0.65
-                visible: ui.tabName !== "settings"
+                visible: view.listTab
                 color: ui.service && ui.service.catalogState === "stale" ? ui.warn : ui.fg
                 text: {
                     if (!ui.service) return ""
@@ -531,7 +572,7 @@ Item {
                 text: settingsView.changed === 0 ? "All settings are at their defaults"
                     : settingsView.changed + (settingsView.changed === 1 ? " setting differs" : " settings differ") + " from the defaults"
             }
-            Btn { ui: view.ui; visible: ui.tabName !== "settings"; text: ui.showLog ? "Hide log" : "Log"; implicitHeight: ui.px(22); active: ui.showLog; onClicked: ui.showLog = !ui.showLog }
+            Btn { ui: view.ui; visible: view.listTab; text: ui.showLog ? "Hide log" : "Log"; implicitHeight: ui.px(22); active: ui.showLog; onClicked: ui.showLog = !ui.showLog }
             Txt { ui: view.ui; visible: ui.tabName === "settings"; text: "Changes apply instantly"; font.pixelSize: ui.fs(10); opacity: 0.45 }
         }
     }
@@ -564,6 +605,9 @@ Item {
 
                 readonly property string kind: ui.confirm ? ui.confirm.kind : ""
                 readonly property var plug: ui.confirm ? ui.confirm.p : null
+                readonly property var list: (ui.confirm && ui.confirm.list) ? ui.confirm.list : null
+                readonly property int n: list ? list.length : (plug ? 1 : 0)
+                readonly property string verb: kind === "remove" ? "Remove" : (kind === "update" ? "Update" : "Install")
 
                 Txt {
                     ui: view.ui
@@ -571,7 +615,8 @@ Item {
                     wrapMode: Text.Wrap
                     font.pixelSize: ui.fs(15)
                     font.weight: Font.DemiBold
-                    text: dlg.plug ? (dlg.kind === "remove" ? "Remove " : (dlg.kind === "update" ? "Update " : "Install ")) + dlg.plug.name + "?" : ""
+                    text: !dlg.plug ? "" : (dlg.n > 1 ? dlg.verb + " " + dlg.n + " plugins?"
+                                                     : dlg.verb + " " + dlg.plug.name + "?")
                 }
                 Txt {
                     ui: view.ui
@@ -580,7 +625,8 @@ Item {
                     opacity: 0.75
                     text: {
                         if (!dlg.plug) return ""
-                        if (dlg.kind === "remove") return "The plugin folder is deleted from your plugins directory."
+                        if (dlg.kind === "remove") return dlg.n > 1 ? "Those plugin folders are deleted from your plugins directory."
+                                                                    : "The plugin folder is deleted from your plugins directory."
                         var t = "Plugins run as unsandboxed code inside your shell, with your user permissions. Installing fetches the plugin's current upstream code"
                         t += dlg.plug.verified ? ", which may be newer than the snapshot that earned its Verified badge." : "."
                         if (!dlg.plug.verified) t += "\n\nThis plugin is NOT verified."
@@ -591,7 +637,7 @@ Item {
                     ui: view.ui
                     Layout.fillWidth: true
                     wrapMode: Text.WrapAnywhere
-                    visible: dlg.plug && dlg.plug.repo !== "" && dlg.kind !== "remove"
+                    visible: dlg.plug && dlg.n === 1 && dlg.plug.repo !== "" && dlg.kind !== "remove"
                     font.pixelSize: ui.fs(10)
                     opacity: 0.55
                     text: dlg.plug ? "From " + dlg.plug.repo : ""
@@ -603,11 +649,24 @@ Item {
                     Btn {
                         ui: view.ui
                         kind: dlg.kind === "remove" ? "danger" : "primary"
-                        text: dlg.kind === "remove" ? "Remove" : (dlg.kind === "update" ? "Update" : "Install")
-                        onClicked: { var c = ui.confirm; ui.confirm = null; if (c) ui.runAction(c.kind, c.p) }
+                        text: dlg.verb
+                        onClicked: {
+                            var c = ui.confirm
+                            ui.confirm = null
+                            if (!c) return
+                            if (c.list) ui.runBatch(c.kind, c.list)
+                            else ui.runAction(c.kind, c.p)
+                        }
                     }
                 }
             }
         }
+    }
+
+    // ---- right-click menu (over everything, above the confirm dialog) ----
+    ContextMenu {
+        ui: view.ui
+        anchors.fill: parent
+        z: 50
     }
 }

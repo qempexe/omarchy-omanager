@@ -59,8 +59,8 @@ SPEC = [
       "Loads preview images from plugins.omarchy.org. Turn off to stay fully offline for images."),
   ]),
   ("Window", [
-    I("windowWidth", "Window width", 460, 400, 1600, 20, "How wide the manager opens. From about 720 it also gets the filter sidebar and the List + stage layout."),
-    I("windowHeight", "Window height", 620, 420, 1100, 20, "How tall the manager opens."),
+    I("windowWidth", "Window width", 560, 400, 1600, 20, "How wide the manager opens. From about 720 it also gets the filter sidebar and the List + stage layout."),
+    I("windowHeight", "Window height", 680, 420, 1100, 20, "How tall the manager opens."),
     E("openAs", "Open as", "panel", ["panel", "window"], {"panel": "Bar panel", "window": "Own window"},
       "Where the bar button opens the manager. You can always pop it out or dock it back from the header.", control="tiles"),
     E("viewMode", "Layout", "list", ["split", "grid", "list", "compact"],

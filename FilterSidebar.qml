@@ -48,7 +48,7 @@ Flickable {
             ui: root.ui
             title: "Sort by"
             Repeater {
-                model: ui.sortOptions
+                model: root.onInstalled ? ui.installedSortOptions : ui.sortOptions
                 delegate: Chip {
                     ui: root.ui
                     label: modelData.label
@@ -94,9 +94,31 @@ Flickable {
             ui: root.ui
             title: "Status"
             visible: root.onInstalled
-            Chip { ui: root.ui; label: "All installed"; on: ui.status !== "enabled" && ui.status !== "disabled"; onClicked: ui.status = "any" }
+            Chip { ui: root.ui; label: "All installed"; on: ui.status === "any"; onClicked: ui.status = "any" }
             Chip { ui: root.ui; label: "Enabled"; on: ui.status === "enabled"; onClicked: ui.status = "enabled" }
             Chip { ui: root.ui; label: "Disabled"; on: ui.status === "disabled"; onClicked: ui.status = "disabled" }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.onInstalled && ui.healthCount > 0
+            spacing: ui.px(4)
+            Txt { ui: root.ui; text: "Health"; font.pixelSize: ui.fs(9); opacity: 0.5 }
+            Chip {
+                ui: root.ui
+                label: "Needs attention (" + ui.healthCount + ")"
+                on: ui.status === "issues"
+                tone: ui.warn
+                onClicked: ui.status = ui.status === "issues" ? "any" : "issues"
+            }
+            Txt {
+                ui: root.ui
+                Layout.fillWidth: true
+                text: ui.healthSummary
+                font.pixelSize: ui.fs(8)
+                opacity: 0.6
+                wrapMode: Text.WordWrap
+            }
         }
 
         Section {

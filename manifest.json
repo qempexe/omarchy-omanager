@@ -38,8 +38,8 @@
       "fontScale": 100,
       "surfaceTint": 0,
       "showPreviews": true,
-      "windowWidth": 460,
-      "windowHeight": 620,
+      "windowWidth": 560,
+      "windowHeight": 680,
       "openAs": "panel",
       "viewMode": "list",
       "columns": "auto",
@@ -162,7 +162,7 @@
         "min": 400,
         "max": 1600,
         "step": 20,
-        "defaultValue": 460,
+        "defaultValue": 560,
         "description": "How wide the manager opens. From about 720 it also gets the filter sidebar and the List + stage layout."
       },
       {
@@ -172,7 +172,7 @@
         "min": 420,
         "max": 1100,
         "step": 20,
-        "defaultValue": 620,
+        "defaultValue": 680,
         "description": "How tall the manager opens."
       },
       {

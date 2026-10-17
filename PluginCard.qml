@@ -18,6 +18,9 @@ Item {
     signal opened()
 
     readonly property var st: ui.stateOf(p)
+    readonly property var health: ui.healthFor(p)
+    readonly property bool selectMode: ui.selectMode === true
+    readonly property bool picked: root.selectMode && ui.selection[p.id] !== undefined
     readonly property bool on: st.installed && st.enabled
     readonly property bool busy: !!(ui.service && ui.service.busyIds[p.id])
     function toggleEnabled() { ui.requestAction(st.enabled ? "disable" : "enable", p) }
@@ -56,8 +59,18 @@ Item {
             id: area
             anchors.fill: parent
             hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.opened()
+            onClicked: function(mouse) {
+                if (mouse.button === Qt.RightButton) {
+                    var pt = area.mapToItem(null, mouse.x, mouse.y)
+                    root.ui.openMenu(root.p, pt.x, pt.y)
+                } else if (root.selectMode) {
+                    root.ui.toggleSelect(root.p)
+                } else {
+                    root.opened()
+                }
+            }
         }
 
         // ---------- grid layout ----------
@@ -126,6 +139,14 @@ Item {
                     spacing: ui.px(6)
                     Txt {
                         ui: root.ui
+                        visible: root.selectMode
+                        text: root.picked ? "\u2611" : "\u2610"
+                        color: root.picked ? ui.accent : ui.fg
+                        opacity: root.picked ? 1 : 0.5
+                        font.pixelSize: ui.fs(13)
+                    }
+                    Txt {
+                        ui: root.ui
                         Layout.fillWidth: true
                         text: p.name
                         font.pixelSize: ui.fs(13)
@@ -138,6 +159,13 @@ Item {
                         text: root.narrow ? "\u2713" : "\u2713 Verified"
                         color: ui.good
                         font.pixelSize: ui.fs(9)
+                    }
+                    Txt {
+                        ui: root.ui
+                        visible: root.health !== null
+                        text: "\u26A0"
+                        color: ui.warn
+                        font.pixelSize: ui.fs(11)
                     }
                     Txt {
                         ui: root.ui
@@ -267,8 +295,10 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: ui.px(6)
+                    Txt { ui: root.ui; visible: root.selectMode; text: root.picked ? "\u2611" : "\u2610"; color: root.picked ? ui.accent : ui.fg; opacity: root.picked ? 1 : 0.5; font.pixelSize: ui.fs(13) }
                     Txt { ui: root.ui; Layout.fillWidth: true; text: p.name; font.pixelSize: ui.fs(12); font.weight: Font.DemiBold; elide: Text.ElideRight }
                     Txt { ui: root.ui; visible: p.verified; text: "\u2713"; color: ui.good; font.pixelSize: ui.fs(11) }
+                    Txt { ui: root.ui; visible: root.health !== null; text: "\u26A0"; color: ui.warn; font.pixelSize: ui.fs(11) }
                     Txt { ui: root.ui; visible: root.isNew; text: "NEW"; color: ui.accent; font.pixelSize: ui.fs(9); font.weight: Font.Bold }
                     Txt { ui: root.ui; visible: root.st.update; text: "UPDATE"; color: ui.warn; font.pixelSize: ui.fs(9); font.weight: Font.Bold }
                 }
@@ -332,8 +362,18 @@ Item {
 
             Rectangle {
                 Layout.alignment: Qt.AlignVCenter
+                visible: !root.selectMode
                 width: ui.px(6); height: width; radius: width / 2
                 color: root.tone
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.selectMode
+                text: root.picked ? "\u2611" : "\u2610"
+                color: root.picked ? ui.accent : ui.fg
+                opacity: root.picked ? 1 : 0.5
+                font.pixelSize: ui.fs(13)
             }
 
             Txt {
@@ -381,6 +421,14 @@ Item {
                 visible: p.verified
                 text: "\u2713"
                 color: ui.good
+                font.pixelSize: ui.fs(11)
+            }
+
+            Txt {
+                ui: root.ui
+                visible: root.health !== null
+                text: "\u26A0"
+                color: ui.warn
                 font.pixelSize: ui.fs(11)
             }
 

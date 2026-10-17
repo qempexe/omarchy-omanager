@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -95,6 +95,141 @@ const ids = r => r.items.map(p => p.id);
   assert.deepStrictEqual(M.findUpdates(cat, inst.map), ["a.old-popular"]);
 })();
 
+(function installedScan() {
+  // `plugin list --json` carries no version at all, so the installed version is
+  // read from manifest.json and merged in. Without that merge the Updates tab
+  // can never find anything to update. The same scan also recovers the plugin's
+  // directory (which is what an update runs against) and its install time.
+  const text = [
+    '["a.old-popular","1.1.0","/p/a.old-popular/manifest.json"]',
+    '["omarchy.clock","1","/p/omarchy.clock/manifest.json"]',
+    '["bad --id","9.9.9","/p/bad/manifest.json"]',
+    '["no.version","","/p/no.version/manifest.json"]',
+    'not json at all',
+    '["also.trailing","2.0.0","/p/also.trailing/manifest.json","extra"]',
+  ].join("\n");
+  const s = M.normalizeScan(text);
+  assert.deepStrictEqual(s, {
+    "a.old-popular": { version: "1.1.0", dir: "a.old-popular", from: "" },
+    "omarchy.clock": { version: "1", dir: "omarchy.clock", from: "" },
+    "no.version": { version: "", dir: "no.version", from: "" },
+    "also.trailing": { version: "2.0.0", dir: "also.trailing", from: "extra" },
+  });
+  assert.deepStrictEqual(M.normalizeScan(""), {}, "an empty scan is not an error");
+  assert.deepStrictEqual(M.normalizeScan('["x.y","v\n1.0"]'), {}, "a stray newline cannot forge an id");
+  assert.strictEqual(M.normalizeScan('["x.y","1","/p/weird name/manifest.json"]')["x.y"].dir, "", "a dir with spaces is not a plain name");
+  assert.strictEqual(M.normalizeScan('["x.y","1","/p/x"]')["x.y"].dir, "", "a path without manifest.json has no dir");
+
+  const births = M.normalizeBirths([
+    "1791724859 1792217628 /p/a.old-popular",
+    "0 1792217628 /p/omarchy.clock",
+    "oops",
+  ].join("\n"));
+  assert.strictEqual(births["a.old-popular"], 1791724859 * 1000, "birth wins when present");
+  assert.strictEqual(births["omarchy.clock"], 1792217628 * 1000, "mtime is the fallback");
+
+  const merged = M.applyScan(inst, s, births);
+  assert.strictEqual(merged.map["a.old-popular"].version, "1.1.0", "the version on disk wins");
+  assert.strictEqual(merged.map["a.old-popular"].dir, "a.old-popular");
+  assert.strictEqual(merged.map["a.old-popular"].installedAt, births["a.old-popular"]);
+  assert.strictEqual(merged.map["omarchy.clock"].version, "1");
+  assert.strictEqual(merged.map["a.old-popular"].clonedFrom, "", "clonedFrom comes from the scan");
+  assert.strictEqual(merged.map["me.local-dev"].version, "", "no manifest, no version");
+  assert.strictEqual(merged.map["me.local-dev"].installedAt, 0, "no manifest, no install time");
+  assert.strictEqual(inst.map["a.old-popular"].version, "1.0.0", "the installed base is not mutated");
+  assert.strictEqual(inst.list[0], inst.map["a.old-popular"], "the input pair still shares records");
+  assert.strictEqual(merged.list[0], merged.map["a.old-popular"], "the rebuilt pair shares them too");
+  assert.deepStrictEqual(M.findUpdates(cat, merged.map), ["a.old-popular"], "updates now come from both sides");
+  assert.deepStrictEqual(M.applyScan(null, s, births), { list: [], map: {} });
+})();
+
+(function newlyInstalledSort() {
+  // The Installed tab can order by the moment each plugin landed on disk, newest
+  // first. Where there is no install time (local plugins, above) it sorts last.
+  const s = M.normalizeScan([
+    '["a.old-popular","1.0.0","/p/a.old-popular/manifest.json"]',
+    '["omarchy.clock","1","/p/omarchy.clock/manifest.json"]',
+  ].join("\n"));
+  const births = { "a.old-popular": 1000, "omarchy.clock": 9000 };
+  const merged = M.applyScan(inst, s, births);
+  const run = o => ids(M.query(cat, merged.list, merged.map, { ...base, source: "all", status: "installed", ...o }));
+  assert.deepStrictEqual(run({ sort: "installed" }), ["omarchy.clock", "a.old-popular", "me.local-dev"], "newest install first, unknown last");
+})();
+
+(function health() {
+  // Health reads the on-disk picture and reports what an update would trip on.
+  const inst2 = M.normalizeInstalled([
+    { id: "a.old-popular", enabled: true },
+    { id: "omarchy.clock", enabled: true },
+    { id: "renamed.one", enabled: true },
+  ]);
+  const s = M.normalizeScan([
+    '["a.old-popular","1.0.0","/p/a.old-popular/manifest.json"]',
+    '["omarchy.clock","1","/p/omarchy.clock/manifest.json"]',
+    '["renamed.one","2.0.0","/p/folder-name/manifest.json"]',
+  ].join("\n"));
+  const births = { "a.old-popular": 1, "omarchy.clock": 2, "folder-name": 3, "junk-dir": 4 };
+  const merged = M.applyScan(inst2, s, births);
+  const catMap = { "a.old-popular": true, "omarchy.clock": true };
+  const git = M.normalizeDirSet("/p/folder-name\n");           // only renamed.one is a checkout
+  const h = M.healthOf(merged.list, births, git, catMap);
+  const kinds = h.map(x => x.id + ":" + x.kind).sort();
+  assert.ok(kinds.includes("a.old-popular:nogit"), "a plugin without .git is flagged");
+  assert.ok(kinds.includes("renamed.one:renamed"), "a dir != id is flagged");
+  assert.ok(kinds.includes("renamed.one:orphan"), "renamed.one is not in the catalog");
+  assert.ok(kinds.includes("junk-dir:nomanifest"), "a dir with no readable manifest is flagged");
+  assert.ok(!kinds.some(k => k.startsWith("omarchy.clock")), "a healthy builtin is not flagged");
+  assert.ok(!kinds.some(k => k.startsWith("a.old-popular:orphan")), "a cataloged plugin is not an orphan");
+
+  assert.deepStrictEqual(M.normalizeDirSet("/p/one\nnope name\n"), { one: true });
+})();
+
+(function targetDirectory() {
+  // omarchy plugin update/remove resolve $PLUGINS_DIR/<name>, and the name is the
+  // directory, not the manifest id. A renamed plugin must be updated by its dir.
+  const merged = M.applyScan(inst, M.normalizeScan('["a.old-popular","1","/p/folder-name/manifest.json"]'), {});
+  assert.strictEqual(M.pluginTarget("update", "a.old-popular", merged.map), "folder-name");
+  assert.strictEqual(M.pluginTarget("remove", "a.old-popular", merged.map), "folder-name");
+  assert.strictEqual(M.pluginTarget("enable", "a.old-popular", merged.map), "a.old-popular", "enable uses the id");
+  assert.strictEqual(M.pluginTarget("update", "x", {}), "x", "no dir known, id stands");
+  assert.deepStrictEqual(M.actionArgs("update", M.pluginTarget("update", "a.old-popular", merged.map), "", {}).argv,
+    ["omarchy", "plugin", "update", "folder-name", "--yes"]);
+})();
+
+(function issuesStatus() {
+  // me.local-dev is installed but not in the catalog, so it is the one finding
+  // here; the "Needs attention" status filters the list to exactly those.
+  const s = M.normalizeScan('["a.old-popular","1.0.0","/p/a.old-popular/manifest.json"]');
+  const merged = M.applyScan(inst, s, { "a.old-popular": 1 });
+  const h = M.healthOf(merged.list, {}, { "a.old-popular": true }, { "a.old-popular": true });
+  assert.deepStrictEqual(h.map(f => f.id), ["me.local-dev"]);
+  const set = {};
+  for (const f of h) set[f.id] = true;
+  const got = ids(M.query(cat, merged.list, merged.map, { ...base, source: "all", status: "issues", healthSet: set }));
+  assert.deepStrictEqual(got, ["me.local-dev"]);
+})();
+
+(function gitHistory() {
+  // The changelog is git's own output, parsed defensively: hash, date, subject.
+  const log = M.parseGitLog([
+    "a1b2c3d\t2026-10-01\tFix the thing",
+    "9f8e7d6\t2026-09-20\tAdd a\tfeature with a tab",
+    "garbage line without tabs",
+    "",
+    "deadbee\t2026-09-01\tInitial commit",
+  ].join("\n"));
+  assert.deepStrictEqual(log[0], { hash: "a1b2c3d", date: "2026-10-01", subject: "Fix the thing" });
+  assert.strictEqual(log[1].subject, "Add a\tfeature with a tab", "tabs inside a subject survive");
+  assert.strictEqual(log.length, 3, "a line with no tabs is skipped");
+  assert.deepStrictEqual(M.parseGitLog(""), []);
+
+  const recent = M.gitLogArgs("/home/me/plugins/x.y", false);
+  assert.deepStrictEqual(recent.slice(0, 4), ["git", "-C", "/home/me/plugins/x.y", "log"]);
+  assert.ok(!recent.includes("HEAD..FETCH_HEAD"), "recent history is not ranged");
+  assert.ok(M.gitLogArgs("/p/x", true).includes("HEAD..FETCH_HEAD"), "incoming history is ranged");
+  assert.deepStrictEqual(M.gitFetchArgs("/p/x"), ["git", "-C", "/p/x", "fetch", "--quiet", "origin", "HEAD"]);
+})();
+
 (function commands() {
   const a = M.actionArgs("install", "x", "https://github.com/o/r", { enableAfterInstall: true });
   assert.deepStrictEqual(a.argv, ["omarchy", "plugin", "add", "https://github.com/o/r.git", "--enable", "--yes"]);
@@ -102,6 +237,9 @@ const ids = r => r.items.map(p => p.id);
   assert.strictEqual(M.actionArgs("install", "x", "ssh://evil", {}), null);
   assert.strictEqual(M.actionArgs("remove", "--all", "", {}), null, "flag-like id refused");
   assert.deepStrictEqual(M.actionArgs("remove", "a.b", "", {}).fallback, ["omarchy", "plugin", "remove", "a.b"]);
+  const u = M.actionArgs("update", "a.b", "", {});
+  assert.deepStrictEqual(u.argv, ["omarchy", "plugin", "update", "a.b", "--yes"], "update is non-interactive: it needs --yes");
+  assert.strictEqual(u.fallback, null, "a fallback without --yes could only fail with the same refusal");
   assert.strictEqual(M.actionArgs("explode", "a.b", "", {}), null);
 })();
 
@@ -142,5 +280,44 @@ const ids = r => r.items.map(p => p.id);
     { id: "r.none", name: "N", addedAt: "2026-07-28", listingValidatedAt: "2026-07-28T12:24:24.000Z", repositoryUpdatedAt: null }]);
   assert.strictEqual(l[0].updatedAt, Date.parse("2026-10-01T08:00:00.000Z"), "repositoryUpdatedAt is the upgrade date");
   assert.strictEqual(l[1].updatedAt, Date.parse("2026-07-28T12:24:24.000Z"), "falls back when it is empty");
+})();
+(function sets() {
+  const catalog = M.normalizeCatalog([
+    { id: "cat.one", name: "One", repo: "https://github.com/o/one" },
+    { id: "cat.two", name: "Two", repo: "https://evil.example/x --upload-pack=sh" },
+  ]);
+  const inst = M.normalizeInstalled({ plugins: [
+    { id: "omarchy.builtin", name: "B", enabled: true },
+    { id: "cat.one", name: "One", enabled: true },
+    { id: "local.thing", name: "Thing", enabled: false },
+  ] });
+  const merged = M.applyScan(inst, M.normalizeScan([
+    '["omarchy.builtin","1","/p/omarchy.builtin/manifest.json"]',
+    '["cat.one","1","/p/cat.one/manifest.json"]',
+    '["local.thing","1","/p/local.thing/manifest.json","https://github.com/l/thing"]',
+  ].join("\n")), {});
+  const set = M.buildSet(merged.list, catalog);
+  assert.deepStrictEqual(set.map(p => p.id), ["cat.one", "local.thing"], "built-ins are left out");
+  assert.strictEqual(set[0].repo, "https://github.com/o/one.git", "repo comes from the catalog");
+  assert.strictEqual(set[1].repo, "https://github.com/l/thing.git", "otherwise from the manifest's clonedFrom");
+
+  const map = merged.map;
+  // nothing here is installed, so each is planned by its repo: a bad repo and no
+  // repo are both skipped, only the good one is installed.
+  const plan = M.planRestore({ plugins: [
+    { id: "cat.two", name: "Two", repo: "https://evil.example/x --upload-pack=sh" },
+    { id: "new.plugin", name: "New", repo: "https://github.com/n/new" },
+    { id: "missing.off", name: "Off", repo: "" },
+  ] }, map);
+  assert.strictEqual(plan.length, 1, "only the missing plugin with a good repo is planned");
+  assert.deepStrictEqual(plan[0], { kind: "install", id: "new.plugin", name: "New", repo: "https://github.com/n/new.git" });
+
+  // an installed-but-disabled plugin is enabled, not reinstalled
+  const off = Object.fromEntries(M.normalizeInstalled({ plugins: [
+    { id: "local.thing", name: "Thing", enabled: false }] }).list.map(r => [r.id, r]));
+  const plan2 = M.planRestore({ plugins: [{ id: "local.thing", name: "Thing", repo: "https://github.com/l/thing" }] }, off);
+  assert.deepStrictEqual(plan2, [{ kind: "enable", id: "local.thing", name: "Thing", repo: "" }]);
+
+  assert.deepStrictEqual(M.planRestore(null, map), [], "no set plans nothing");
 })();
 console.log("model tests: ok");

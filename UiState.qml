@@ -135,7 +135,7 @@ Item {
     }
 
     // ---- filter state ----------------------------------------------------------
-    property string tabName: "browse"        // browse | installed | updates | saved | settings
+    property string tabName: "browse"        // browse | installed | updates | saved | sets | settings
     property string query: ""
     property string settingsFilter: ""      // the header search while the Settings tab is open
     property string source: "community"
@@ -164,6 +164,12 @@ Item {
         { key: "rated", label: "Best install rate" },
         { key: "az", label: "A to Z" }
     ]
+    // The Installed tab can also order by when a plugin first landed on disk.
+    // That is a fact about the local directory, not the catalog, so the option
+    // lives only here; the other orders still apply.
+    readonly property var installedSortOptions: [
+        { key: "installed", label: "Newly installed" }
+    ].concat(sortOptions)
 
     function resetFilters() {
         var c = cfgSafe
@@ -215,6 +221,8 @@ Item {
     }
     onTabNameChanged: {
         status = "any"; category = ""; tags = []; selected = null
+        selectMode = false; selection = ({})
+        if (tabName !== "installed" && sortKey === "installed") sortKey = cfgSafe.defaultSort
         recomputeTimer.restart()
     }
 
@@ -231,11 +239,11 @@ Item {
             query: query, source: source, category: category, tags: tags,
             verifiedOnly: verifiedOnly, hideInstalled: hideInstalled, status: status,
             scope: scope, days: days, sort: sortKey, now: now, since: service.prevVisit,
-            bookmarks: service.bookmarks, updateSet: updateSet
+            bookmarks: service.bookmarks, updateSet: updateSet, healthSet: healthSet
         }
         if (t === "installed") {
             o.source = "all"; o.hideInstalled = false
-            o.status = (status === "enabled" || status === "disabled") ? status : "installed"
+            o.status = (status === "enabled" || status === "disabled" || status === "issues") ? status : "installed"
         } else if (t === "updates") {
             o.source = "all"; o.hideInstalled = false; o.status = "updates"
         } else if (t === "saved") {
@@ -254,6 +262,44 @@ Item {
         return m
     }
 
+    // ---- health (Installed tab) ------------------------------------------------
+    readonly property int healthCount: service ? service.healthCount : 0
+    readonly property var healthSet: {
+        var m = ({})
+        var h = service ? service.health : []
+        for (var i = 0; i < h.length; i++) m[h[i].id] = true
+        return m
+    }
+    readonly property string healthSummary: {
+        if (!service) return ""
+        var c = {}
+        var h = service.health
+        for (var i = 0; i < h.length; i++) c[h[i].kind] = (c[h[i].kind] || 0) + 1
+        var parts = []
+        if (c.renamed) parts.push(c.renamed + " in a differently named folder")
+        if (c.nogit) parts.push(c.nogit + " not git-managed")
+        if (c.orphan) parts.push(c.orphan + " not in the catalog")
+        if (c.nomanifest) parts.push(c.nomanifest + " without a manifest")
+        return parts.join("  \u00b7  ")
+    }
+    function healthFor(p) { return service ? service.healthFor(p.id) : null }
+
+    // ---- plugin sets (profiles) -------------------------------------------------
+    readonly property var sets: service ? service.sets : []
+    readonly property int setCount: sets.length
+    function saveSet(name) { return service ? service.saveSet(name) : false }
+    function restoreSet(i) { return service ? service.restoreSet(i) : 0 }
+    function deleteSet(i) { if (service) service.deleteSet(i) }
+    // How many plugins in a set are reinstatable (have a repo) — the rest only get
+    // enabled if already present. Shown as a hint in the Sets tab.
+    function setRepos(i) {
+        var s = sets[i]
+        if (!s || !s.plugins) return 0
+        var n = 0
+        for (var k = 0; k < s.plugins.length; k++) if (s.plugins[k].repo !== "") n++
+        return n
+    }
+
     Timer { id: recomputeTimer; interval: 70; onTriggered: root.recompute() }
     Timer { interval: 60000; repeat: true; running: root.opened; onTriggered: root.now = Date.now() }
 
@@ -268,6 +314,7 @@ Item {
     onDaysChanged: recomputeTimer.restart()
     onSortKeyChanged: recomputeTimer.restart()
     onUpdateSetChanged: recomputeTimer.restart()
+    onHealthSetChanged: recomputeTimer.restart()
     onServiceChanged: recomputeTimer.restart()
 
     Connections {
@@ -276,6 +323,7 @@ Item {
         function onCatalogChanged() { recomputeTimer.restart() }
         function onInstalledMapChanged() { recomputeTimer.restart() }
         function onBookmarksChanged() { recomputeTimer.restart() }
+        function onHealthChanged() { recomputeTimer.restart() }
     }
 
     // ---- item state / actions ---------------------------------------------------------
@@ -285,11 +333,74 @@ Item {
             installed: !!inst,
             enabled: !!inst && inst.enabled,
             update: !!updateSet[p.id],
-            version: inst ? inst.version : ""
+            version: inst ? inst.version : "",
+            installedAt: inst ? (inst.installedAt || 0) : 0,
+            dir: inst ? (inst.dir || "") : ""
         }
     }
 
     function openDetail(p) { selected = p }
+
+    // ---- right-click context menu ----------------------------------------------
+    // { p, x, y } in the window's own coordinates, or null when no menu is up.
+    property var menu: null
+    function openMenu(p, x, y) { menu = null; menu = { p: p, x: x, y: y } }
+    function closeMenu() { menu = null }
+
+    // ---- batch selection --------------------------------------------------------
+    // id -> plugin, so a batch action knows each plugin's name and repo even after
+    // the list is filtered. Selecting is a mode: cards show a checkbox and click
+    // picks instead of opening.
+    property bool selectMode: false
+    property var selection: ({})
+    readonly property int selCount: {
+        var n = 0
+        for (var k in selection) n++
+        return n
+    }
+    function toggleSelect(p) {
+        var s = {}
+        for (var k in selection) s[k] = selection[k]
+        if (s[p.id] !== undefined) delete s[p.id]
+        else s[p.id] = p
+        selection = s
+    }
+    function clearSelection() { selection = ({}) }
+    function setSelectMode(on) { selectMode = on === true; if (!selectMode) clearSelection() }
+    function selectAllVisible() {
+        var s = {}
+        for (var i = 0; i < items.length; i++) s[items[i].id] = items[i]
+        selection = s
+    }
+    // The selected plugins that a given batch action actually applies to.
+    function selectedFor(kind) {
+        var out = []
+        for (var id in selection) {
+            var p = selection[id]
+            var st = stateOf(p)
+            if (kind === "enable" && st.installed && !st.enabled) out.push(p)
+            else if (kind === "disable" && st.installed && st.enabled) out.push(p)
+            else if (kind === "update" && st.update) out.push(p)
+            else if (kind === "remove" && st.installed && !p.builtin) out.push(p)
+            else if (kind === "install" && !st.installed && !p.builtin && p.repo !== "" && p.installable) out.push(p)
+            else if (kind === "save" && !(service && service.bookmarks[p.id])) out.push(p)
+        }
+        return out
+    }
+    function requestBatch(kind) {
+        var list = selectedFor(kind)
+        if (list.length === 0) return
+        var ask = (kind === "remove" && cfgSafe.confirmRemove)
+               || ((kind === "install" || kind === "update") && cfgSafe.confirmInstall)
+        if (ask) { confirm = { kind: kind, p: list[0], list: list }; return }
+        runBatch(kind, list)
+    }
+    function runBatch(kind, list) {
+        if (!service) return
+        for (var i = 0; i < list.length; i++)
+            service.perform(kind, list[i].id, list[i].name, list[i].repo)
+        clearSelection()
+    }
 
     function requestAction(kind, p) {
         if (!service) return
@@ -342,6 +453,9 @@ Item {
         } else {
             selected = null
             confirm = null
+            menu = null
+            selectMode = false
+            selection = ({})
             showLog = false
             if (service) service.markSeen()
         }

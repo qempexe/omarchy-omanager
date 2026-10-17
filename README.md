@@ -6,7 +6,7 @@ A plugin manager for the Omarchy bar. Click the bar button and a panel opens; cl
 
 ## Features
 
-- **Tabs**: Browse, Installed, Updates (with *Update all*), Saved, Settings.
+- **Tabs**: Browse, Installed, Updates (with *Update all*), Saved, Sets, Settings.
 - **Stats**: stars, hearts, views, and install-command copies show on every card, list row, and compact row, and in the detail / stage pane.
 - **Sort**:
   - newly uploaded
@@ -18,6 +18,19 @@ A plugin manager for the Omarchy bar. Click the bar button and a panel opens; cl
   - views
   - best install rate
   - A to Z
+  - **newly installed** (Installed tab only: the moment each plugin landed on disk, newest first)
+
+  The Installed tab's sort list also offers **Newly installed**, which reads each plugin directory's birth time (falling back to its modification time on filesystems that don't record one). Everything else is offered there too.
+- **Health** (Installed tab): flags installed plugins that need attention and adds a **Needs attention** status to filter the list to them:
+  - installed in a folder whose name differs from its id
+  - not a git checkout, so `omarchy plugin update` cannot touch it
+  - not in the catalog (local or unpublished)
+  - a plugin directory with no readable `manifest.json`
+  The detail pane shows the exact problem and an **Open folder** button. Updates and removals always run against the real folder name, so a plugin in a differently named folder still updates and removes correctly.
+- **Changelog**: the detail pane lists an installed plugin's recent commits (`git log`, read-only). When an update is pending, **Incoming** fetches and shows exactly what the update would bring in, so you can see the changes before you update.
+- **Right-click a plugin** for a short menu of what applies to it (update/install, enable/disable, save, open folder or repository, copy install command, details, remove).
+- **Batch select**: **Select** turns cards into checkboxes and shows an action bar to **Update / Enable / Disable / Save / Remove** everything picked at once (only the applicable ones act). Removals still ask to confirm.
+- **Plugin sets** (Sets tab): name a snapshot of what you have installed, then **Restore** it later to re-enable what is off and reinstall what is missing (using the plugin's repo, so it works on a fresh machine). Nothing already present is removed or downgraded, so restoring is always safe.
 - **Filters**:
   - community / built-in / all
   - category
@@ -162,6 +175,16 @@ python3 tests/test_no_native_text.py  # no TextInput anywhere, paste read stays 
 
 ## Changelog
 
+### Unreleased
+
+- **Installed-tab upgrades**: a *Newly installed* sort (by the on-disk directory's birth time), and a **Health** view that flags plugins that need attention — installed under a different folder name than their id, not a git checkout, missing a manifest, or missing from the catalog.
+- **Update and remove by folder name.** `omarchy plugin update` and `remove` resolve the on-disk directory, not the manifest id; the manager now passes the directory, so a plugin cloned into a differently named folder updates and removes correctly. (Built-in and enable/disable still use the id.)
+- **Changelog in the detail pane**: recent commits for an installed plugin, plus the exact commits an available update would bring in.
+- **Right-click** any plugin for a short, context-aware menu.
+- **Batch select**: pick several plugins and Update / Enable / Disable / Save / Remove them together.
+- **Plugin sets**: save the current install as a named set and restore it on another machine.
+- **Faster search**: the query pool is cached across keystrokes instead of rebuilt each time.
+
 ### 1.5.0
 
 - **New look for the whole panel**, docked and popped out: one rounded panel with a plain neutral edge, a header card (title, status, Refresh, Pop out / Dock, close), underlined tabs, one content card of rows, and the `Esc` footer. The search box now sits at the top of the content card.
@@ -249,6 +272,9 @@ Things that are inferred rather than confirmed:
 - **Catalog fields**: previews use `previewThumbnail` / `previewImage`, and the listing date reads `listedAt` first (falling back to `addedAt`, `createdAt`, and several other spellings) so the "Newly uploaded" order matches the website.
 - **Last upgraded date**: reads `repositoryUpdatedAt` first, then several other spellings. If "Upgraded" shows "unknown" or looks wrong, adjust the alias list in `normalizePlugin`.
 - **Stats API response shape**: `api.omarchyplugins.com/v1/stats` accepts several shapes. If none matches, hearts / views simply stay empty.
+- **Installed versions**: `omarchy plugin list --json` reports no version at all, so the Updates tab reads each plugin's `manifest.json` under `~/.config/omarchy/plugins/*/` with `jq` (an omarchy dependency, run through `find -exec`). Without `jq` the scan comes back empty, no updates are shown, and the activity log says why.
+- **Install time**: not in the manifest either, so the Installed tab's **Newly installed** sort takes each plugin directory's birth time from `stat` (`%W`, falling back to mtime `%Y` on filesystems that don't record birth time). Directories with no readable time sort last.
+- **Update/remove by folder**: `omarchy plugin update` and `omarchy plugin remove` resolve `~/.config/omarchy/plugins/<name>`, where `<name>` is the folder, not the manifest id. A plugin installed in a folder named differently from its id (a manual clone) is updated and removed by its folder name; enable/disable still use the id.
 - **`FloatingWindow`**: the pop-out comes from Quickshell. It is used by other Omarchy plugins but has not been run here.
 - **CLI flags**: the `--yes` flags on `plugin add` / `plugin remove` and the `plugin enable|disable|update` subcommands are assumed. Remove retries without `--yes` if the first attempt fails.
 

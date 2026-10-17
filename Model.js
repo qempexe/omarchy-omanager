@@ -257,6 +257,91 @@ function normalizeInstalled(raw) {
     return { list: list, map: map }
 }
 
+// The directory a manifest lives in, taken from its path. It is not always the
+// plugin id - a manually cloned plugin keeps the clone's folder name - and it is
+// what `omarchy plugin update` resolves on disk, so it is kept alongside the id.
+function dirNameOf(path) {
+    var m = /^(.*)\/manifest\.json$/.exec(str(path))
+    if (!m) return ""
+    var dir = m[1].split("/").pop()
+    return /^[A-Za-z0-9._-]{1,128}$/.test(dir) ? dir : ""
+}
+
+// `omarchy plugin list` reports no version, so each installed plugin is read
+// from its own manifest.json: the scanner prints one `[id, version, path]` JSON
+// array per plugin. That output is untrusted too - the id is checked, the
+// version trimmed and capped, the directory taken from the path and checked as a
+// plain name.
+function normalizeScan(text) {
+    var out = {}
+    var lines = str(text).split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim()
+        if (line === "") continue
+        var row = null
+        try { row = JSON.parse(line) } catch (e) { continue }
+        if (!Array.isArray(row) || row.length < 2) continue
+        var id = str(row[0]).trim()
+        if (!SAFE_ID.test(id)) continue
+        out[id] = { version: str(row[1]).trim().slice(0, 32), dir: dirNameOf(row[2]),
+                    from: str(row[3]).trim().slice(0, 256) }
+    }
+    return out
+}
+
+// `stat -c '%W %Y %n'` over the plugin directories: birth time (0 on filesystems
+// that do not record one), mtime, then the path. "Newly installed" uses birth
+// and falls back to mtime, so a plugin installed on an older filesystem still
+// sorts sensibly.
+function normalizeBirths(text) {
+    var out = {}
+    var lines = str(text).split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var m = /^(\d+)\s+(\d+)\s+(.+)$/.exec(lines[i])
+        if (!m) continue
+        var dir = m[3].replace(/\/+$/, "").split("/").pop()
+        if (!/^[A-Za-z0-9._-]{1,128}$/.test(dir)) continue
+        var w = Number(m[1]), y = Number(m[2])
+        out[dir] = w > 0 ? w * 1000 : (y > 0 ? y * 1000 : 0)
+    }
+    return out
+}
+
+// A set of directory names, one path per line (from `find ... -printf '%h\n'`).
+// Used for the list of directories that hold a .git. Plain names only.
+function normalizeDirSet(text) {
+    var out = {}
+    var lines = str(text).split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var dir = lines[i].trim().replace(/\/+$/, "").split("/").pop()
+        if (/^[A-Za-z0-9._-]{1,128}$/.test(dir)) out[dir] = true
+    }
+    return out
+}
+
+// Folds the on-disk scan into the installed records and rebuilds the id map:
+// `version` feeds findUpdates, `dir` is what an update runs against, and
+// `installedAt` (from the birth scan) feeds the "Newly installed" sort. Returns
+// a new { list, map } pair: the records handed in are never mutated.
+function applyScan(inst, scan, births) {
+    var list = []
+    var map = {}
+    if (!inst || !Array.isArray(inst.list)) return { list: list, map: map }
+    for (var i = 0; i < inst.list.length; i++) {
+        var src = inst.list[i]
+        var rec = {}
+        for (var k in src) rec[k] = src[k]
+        var s = scan ? scan[rec.id] : null
+        if (s && s.version) rec.version = s.version
+        rec.dir = s ? s.dir : ""
+        rec.clonedFrom = s ? s.from : ""
+        rec.installedAt = (s && s.dir && births && births[s.dir] !== undefined) ? births[s.dir] : 0
+        list.push(rec)
+        map[rec.id] = rec
+    }
+    return { list: list, map: map }
+}
+
 function pseudoRecord(rec, category, author) {
     var p = {
         id: rec.id, name: rec.name, description: rec.description, author: author,
@@ -303,7 +388,15 @@ function dateOf(p, scope) {
     return scope === "added" ? p.addedAt : (scope === "updated" ? p.updatedAt : p.fresh)
 }
 
+// The pool (and the id set built alongside it) is rebuilt only when the
+// catalog, the installed list or the source changes. query() runs on every
+// keystroke and filter change; rebuilding a 5,000-odd-entry concatenation each
+// time was the one cost that grew with the catalog.
+var _poolCache = { catalog: null, installed: null, source: null, out: null }
+
 function pool(catalog, installedList, installedMap, source) {
+    if (_poolCache.catalog === catalog && _poolCache.installed === installedList && _poolCache.source === source)
+        return _poolCache.out
     var out = []
     if (source === "community" || source === "all") {
         out = out.concat(catalog)
@@ -318,6 +411,7 @@ function pool(catalog, installedList, installedMap, source) {
         for (var k = 0; k < installedList.length; k++)
             if (installedList[k].builtin) out.push(pseudoRecord(installedList[k], "Built-in", "Omarchy"))
     }
+    _poolCache = { catalog: catalog, installed: installedList, source: source, out: out }
     return out
 }
 
@@ -330,14 +424,20 @@ function statusOk(p, status, ctx) {
     case "disabled": return !!inst && !inst.enabled
     case "updates": return !!ctx.updateSet[p.id]
     case "saved": return !!ctx.bookmarks[p.id]
+    case "issues": return !!ctx.healthSet[p.id]
     case "new": return p.addedAt > ctx.since
     default: return true
     }
 }
 
-function sorter(key) {
+function sorter(key, ctx) {
     var by = function(f, dir) { return function(a, b) { return (f(b) - f(a)) * dir } }
+    var installedAt = function(p) {
+        var inst = ctx && ctx.installedMap ? ctx.installedMap[p.id] : null
+        return inst ? (inst.installedAt || 0) : 0
+    }
     switch (key) {
+    case "installed": return by(installedAt, 1)
     case "listed": return function(a, b) { return (a._i || 0) - (b._i || 0) }
     case "updated": return by(function(p) { return p.updatedAt }, 1)
     case "fresh": return by(function(p) { return p.fresh }, 1)
@@ -366,7 +466,7 @@ function countMap(list, field) {
 //       scope, days, sort, now, since, bookmarks, updateSet }
 function query(catalog, installedList, installedMap, st) {
     var ctx = { installedMap: installedMap, updateSet: st.updateSet || {}, bookmarks: st.bookmarks || {},
-                since: st.since || 0 }
+                healthSet: st.healthSet || {}, since: st.since || 0 }
     var all = pool(catalog, installedList, installedMap, st.source)
     var toks = tokens(st.query)
     var cutoff = st.days > 0 ? (st.now || Date.now()) - st.days * DAY : 0
@@ -388,7 +488,7 @@ function query(catalog, installedList, installedMap, st) {
         for (var i = 0; i < wantTags.length; i++) if (p.tags.indexOf(wantTags[i]) < 0) return false
         return true
     })
-    var cmp = sorter(st.sort)
+    var cmp = sorter(st.sort, ctx)
     items.sort(function(a, b) { return cmp(a, b) || (a._i - b._i) })
     return { items: items, facets: facets, poolSize: all.length }
 }
@@ -405,7 +505,8 @@ function actionArgs(kind, id, repo, cfg) {
         return { argv: argv, fallback: null }
     }
     if (!SAFE_ID.test(str(id))) return null
-    if (kind === "update") return { argv: base.concat(["update", id]), fallback: null }
+    if (kind === "update")
+        return { argv: base.concat(["update", id, "--yes"]), fallback: null }
     if (kind === "enable" || kind === "disable") return { argv: base.concat([kind, id]), fallback: null }
     if (kind === "remove")
         return { argv: base.concat(["remove", id, "--yes"]), fallback: base.concat(["remove", id]) }
@@ -414,6 +515,111 @@ function actionArgs(kind, id, repo, cfg) {
 
 function installCommand(p) {
     return p.repo ? "omarchy plugin add " + p.repo + " --enable" : ""
+}
+
+// `omarchy plugin update` and `remove` resolve "$PLUGINS_DIR/<name>", so the name
+// they need is the on-disk directory, which is not always the manifest id (a
+// manually cloned plugin keeps the clone's folder name). When the directory is
+// known it is preferred; otherwise the id is passed as before.
+function pluginTarget(kind, id, installedMap) {
+    if ((kind === "update" || kind === "remove") && installedMap) {
+        var inst = installedMap[id]
+        if (inst && SAFE_ID.test(str(inst.dir))) return inst.dir
+    }
+    return id
+}
+
+// ---- plugin sets (profiles) ----------------------------------------------------
+// A set is a list of the installed third-party plugins, each with the repo that
+// would reinstall it: the catalog's address when known, otherwise the manifest's
+// own clonedFrom. Built-in plugins are left out (they ship with Omarchy).
+function buildSet(installedList, catalog) {
+    var repoById = {}
+    for (var i = 0; i < catalog.length; i++) repoById[catalog[i].id] = catalog[i].repo
+    var out = []
+    for (var j = 0; j < installedList.length; j++) {
+        var rec = installedList[j]
+        if (rec.builtin) continue
+        var repo = safeRepoUrl(repoById[rec.id] || rec.clonedFrom || "")
+        out.push({ id: rec.id, name: rec.name, repo: repo || "" })
+    }
+    return out
+}
+
+// What restoring a set would do, as actions ready for Service.perform. Additive:
+// installed-but-off plugins are enabled, missing ones with a known repo are
+// installed, and nothing already present is touched.
+function planRestore(set, installedMap) {
+    var out = []
+    if (!set || !set.plugins) return out
+    for (var i = 0; i < set.plugins.length; i++) {
+        var pl = set.plugins[i]
+        var inst = installedMap ? installedMap[pl.id] : null
+        if (inst) {
+            if (!inst.enabled) out.push({ kind: "enable", id: pl.id, name: pl.name, repo: "" })
+        } else {
+            var repo = safeRepoUrl(pl.repo)
+            if (repo) out.push({ kind: "install", id: pl.id, name: pl.name, repo: repo })
+        }
+    }
+    return out
+}
+
+// What is wrong with the installed set, one finding per problem, for the
+// Installed tab's Health view. Read-only: records come from applyScan (so they
+// carry `dir`), the directory list from the birth scan, and the set of git
+// checkouts from the .git scan.
+function healthOf(installedList, births, gitDirs, catalogMap) {
+    var out = []
+    var known = {}
+    function push(id, dir, name, kind, text) {
+        out.push({ id: id, dir: dir || "", name: name || id, kind: kind, text: text })
+    }
+    for (var i = 0; i < installedList.length; i++) {
+        var rec = installedList[i]
+        var dir = rec.dir || ""
+        if (dir) known[dir] = true
+        if (rec.builtin) continue
+        if (dir && dir !== rec.id)
+            push(rec.id, dir, rec.name, "renamed", "Installed in '" + dir + "', not '" + rec.id + "'")
+        if (dir && gitDirs && !gitDirs[dir])
+            push(rec.id, dir, rec.name, "nogit", "Not a git checkout: omarchy cannot update it")
+        if (!catalogMap || !catalogMap[rec.id])
+            push(rec.id, dir, rec.name, "orphan", "Not in the catalog (local or unpublished)")
+    }
+    if (births) {
+        for (var d in births) {
+            if (known[d]) continue
+            push(d, d, d, "nomanifest", "No readable manifest.json")
+        }
+    }
+    return out
+}
+
+// ---- git history (changelog in the detail pane) --------------------------------
+// One line per commit: abbreviated hash, author date, subject, tab-separated.
+function gitLogArgs(dirPath, incoming) {
+    var argv = ["git", "-C", str(dirPath), "log", "-n", "20",
+                "--pretty=format:%h\t%ad\t%s", "--date=short"]
+    if (incoming) argv.push("HEAD..FETCH_HEAD")
+    return argv
+}
+
+function gitFetchArgs(dirPath) {
+    return ["git", "-C", str(dirPath), "fetch", "--quiet", "origin", "HEAD"]
+}
+
+function parseGitLog(text) {
+    var out = []
+    var lines = str(text).split("\n")
+    for (var i = 0; i < lines.length && out.length < 20; i++) {
+        if (lines[i].trim() === "") continue
+        var parts = lines[i].split("\t")
+        if (parts.length < 3) continue
+        out.push({ hash: str(parts[0]).slice(0, 40), date: str(parts[1]).slice(0, 10),
+                   subject: str(parts.slice(2).join("\t")).slice(0, 200) })
+    }
+    return out
 }
 
 // ---- display helpers -----------------------------------------------------------
