@@ -174,7 +174,7 @@ def manifest_item(it):
 
 def write_manifest():
     m = {
-      "schemaVersion": 1, "id": PLUGIN_ID, "name": "Omanager", "version": "2.0.0",
+      "schemaVersion": 1, "id": PLUGIN_ID, "name": "Omanager", "version": "2.0.1",
       "author": "qempexe", "license": "MIT",
       "description": "Plugin manager for the Omarchy bar: browse, filter, install, update and remove plugins from a window.",
       "kinds": ["service", "bar-widget"], "keepLoaded": True,

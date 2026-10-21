@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- The right-click menu now works: Enable, Disable, Save, Open folder, Open repository, Show details and Remove now act on the plugin you opened it on.
+
 ## 2.0.0
 
 ### From the community
