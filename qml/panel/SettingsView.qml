@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import "Schema.js" as Schema
+import "../js/Schema.js" as Schema
+import "../controls"
 
 // The body of the Settings tab. The panel header (ManagerView) already has the
 // title, the search box and Reset all, so this is just:

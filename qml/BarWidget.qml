@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import qs.Ui
+import "core"
 
 // Bar button for Omanager. Clicking it opens / closes the manager window
 // (Panel.qml). The window follows the Omarchy panel contract: this entry point
@@ -342,7 +343,7 @@ BarWidget {
     Loader {
         id: panelLoader
         active: true
-        source: Qt.resolvedUrl("Panel.qml")
+        source: Qt.resolvedUrl("panel/Panel.qml")
         onLoaded: {
             root.injectPanel()
             Qt.callLater(root.injectPanel)
@@ -355,7 +356,7 @@ BarWidget {
     Loader {
         id: windowLoader
         active: root.windowRequested
-        source: Qt.resolvedUrl("PopoutWindow.qml")
+        source: Qt.resolvedUrl("panel/PopoutWindow.qml")
         onLoaded: {
             item.ui = ux
             item.visible = root.windowRequested

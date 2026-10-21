@@ -41,21 +41,21 @@ FORBIDDEN = [
     (r"Qt\.application\.clipboard|\bClipboard\b", "Qt clipboard object"),
 ]
 
-files = sorted(glob.glob(os.path.join(ROOT, "*.qml")))
+files = sorted(glob.glob(os.path.join(ROOT, "qml", "**", "*.qml"), recursive=True))
 for path in files:
-    name = os.path.basename(path)
+    name = os.path.relpath(path, ROOT)
     src = code_only(read(name))
     for pattern, what in FORBIDDEN:
         if re.search(pattern, src, flags=re.M):
             failures.append("%s: %s" % (name, what))
 
 # the typed-text field is the only thing allowed to be a text field, and it is a Text
-paste = code_only(read("PasteInput.qml"))
+paste = code_only(read("qml/controls/PasteInput.qml"))
 if not re.search(r"\bText\s*\{\s*id:\s*display", paste):
     failures.append("PasteInput.qml: no longer drawn from a plain Text")
 
 # the explicit paste path stays bounded
-svc = code_only(read("Service.qml"))
+svc = code_only(read("qml/Service.qml"))
 if not re.search(r"pasteMax:\s*1024", svc):
     failures.append("Service.qml: paste byte cap missing or changed")
 if not re.search(r"Timer\s*\{\s*id:\s*pasteKill\s*interval:\s*2000", svc):
@@ -64,7 +64,7 @@ if '"wl-paste"' not in svc or "sh" in re.findall(r'command:\s*\[\s*"(\w+)"', svc
     failures.append("Service.qml: paste must run wl-paste directly, not through a shell")
 
 # every field is a PasteInput
-for name in ("ManagerView.qml", "SettingRow.qml"):
+for name in ("qml/panel/ManagerView.qml", "qml/panel/SettingRow.qml"):
     if "PasteInput" not in read(name):
         failures.append("%s: expected PasteInput" % name)
 

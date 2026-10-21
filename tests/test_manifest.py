@@ -5,6 +5,13 @@ import json, os, re, sys, unittest
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
 
+def qml_files():
+    out = []
+    for d, _, files in os.walk(os.path.join(ROOT, "qml")):
+        out += [os.path.relpath(os.path.join(d, f), ROOT) for f in files if f.endswith(".qml")]
+    return sorted(out)
+
+
 def read(name):
     with open(os.path.join(ROOT, name)) as fh:
         return fh.read()
@@ -20,14 +27,14 @@ class ManifestTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), rel)
 
     def test_settings_drift(self):
-        qml = read("BarWidget.qml")
+        qml = read("qml/BarWidget.qml")
         used = set(re.findall(r'setting\("([A-Za-z0-9_]+)"', qml))
         schema = {s["key"] for s in self.bw["schema"]}
         self.assertEqual(used, schema)
         self.assertEqual(set(self.bw["defaults"]), schema)
 
     def test_defaults_match_schema_and_qml_fallbacks(self):
-        qml = read("BarWidget.qml")
+        qml = read("qml/BarWidget.qml")
         for s in self.bw["schema"]:
             self.assertEqual(self.bw["defaults"][s["key"]], s["defaultValue"], s["key"])
             m = re.search(r'setting\("%s", ([^)]+)\)' % s["key"], qml)
@@ -39,7 +46,7 @@ class ManifestTests(unittest.TestCase):
                 self.assertTrue(s["min"] <= s["defaultValue"] <= s["max"])
 
     def test_qml_choice_lists_match_manifest_options(self):
-        qml = read("BarWidget.qml")
+        qml = read("qml/BarWidget.qml")
         for s in self.bw["schema"]:
             if s["type"] != "enum":
                 continue
@@ -57,7 +64,7 @@ class ManifestTests(unittest.TestCase):
             self.assertEqual(opts, s["options"], s["key"])
 
     def test_schema_js_matches_manifest(self):
-        schema_js = read("Schema.js")
+        schema_js = read("qml/js/Schema.js")
         groups = json.loads(re.search(r"var groups = (.*?);\n\nvar defaults", schema_js, re.S).group(1))
         items = {i["key"]: i for g in groups for i in g["items"]}
         self.assertEqual(set(items), {s["key"] for s in self.bw["schema"]})
@@ -66,7 +73,7 @@ class ManifestTests(unittest.TestCase):
 
     def test_no_duplicate_signal_handlers(self):
         """QML refuses to load a component that defines the same on<X>Changed twice."""
-        for name in sorted(f for f in os.listdir(ROOT) if f.endswith(".qml")):
+        for name in qml_files():
             # top-level handlers only (4-space indent) so nested objects don't collide
             found = re.findall(r"^    (on[A-Z]\w*):", read(name), re.M)
             dupes = {h for h in found if found.count(h) > 1}
@@ -74,7 +81,7 @@ class ManifestTests(unittest.TestCase):
 
     def test_no_shell_strings_or_eval(self):
         """Commands must be argument arrays; nothing should go through sh -c."""
-        for name in ("Service.qml", "Model.js"):
+        for name in ("qml/Service.qml", "qml/js/Model.js"):
             code = read(name)
             self.assertNotRegex(code, r'"sh"|"bash"|"-c"|\beval\(|new Function')
 
@@ -82,7 +89,7 @@ class ManifestTests(unittest.TestCase):
         """Qt's TextInput / TextEdit / TextField carry their own clipboard handling, which
         reads foreign clipboard text with no byte or time limit. Text fields must use
         PasteInput, which is built from a plain Text and never touches the clipboard."""
-        for name in sorted(f for f in os.listdir(ROOT) if f.endswith(".qml")):
+        for name in qml_files():
             for i, line in enumerate(read(name).split("\n")):
                 if re.match(r"^\s*(?:[\w.]+:\s*)?(TextInput|TextEdit|TextField)\s*\{", line):
                     self.fail("%s:%d uses a native editable text item; use PasteInput" % (name, i + 1))
@@ -90,7 +97,7 @@ class ManifestTests(unittest.TestCase):
     def test_every_text_item_is_plain_text(self):
         """MPRIS metadata is attacker-controlled: Text.AutoText would render
         <img src=...> and fetch remote URLs. Every Text item must pin PlainText."""
-        for name in sorted(f for f in os.listdir(ROOT) if f.endswith(".qml")):
+        for name in qml_files():
             lines = read(name).split("\n")
             for i, line in enumerate(lines):
                 if not re.match(r"^\s*(?:[\w.]+:\s*)?Text \{\s*$", line):

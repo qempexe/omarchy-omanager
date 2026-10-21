@@ -2,7 +2,7 @@
 // Run with: node tests/test_model.js
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
-let src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
+let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
 const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");

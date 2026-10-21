@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../controls"
 
 // All the filters. Every control writes straight into the panel's filter state
 // (ui.*), and the panel recomputes the results.

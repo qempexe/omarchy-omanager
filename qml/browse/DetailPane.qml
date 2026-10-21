@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import "Model.js" as Model
+import "../js/Model.js" as Model
+import "../controls"
 
 // Slide-in details for one plugin, with every action that applies to it.
 Rectangle {

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import "Model.js" as Model
+import "../js/Model.js" as Model
+import "../controls"
 
 // Right-click menu for a plugin. Hand-rolled (the shell draws no native menus):
 // a full-size catcher that closes on any outside click, and a small card of

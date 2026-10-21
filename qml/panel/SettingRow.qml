@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../controls"
 
 // One setting: label + plain-language hint on the left, current value and a
 // reset arrow on the right, and a purpose-built control underneath.

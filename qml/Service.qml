@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Model.js" as Model
+import "js/Model.js" as Model
 
 // Shared brain of Omanager (one instance for the whole shell).
 //   * downloads and caches the plugin catalog (curl, https only)

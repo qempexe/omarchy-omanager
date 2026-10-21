@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import "Model.js" as Model
+import "../js/Model.js" as Model
+import "../controls"
 
 // Saved plugin sets (profiles): a named snapshot of the installed third-party
 // plugins. "Restore" re-enables anything from the set that is installed but

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../controls"
 
 // The scrolling grid / list / compact table of plugins, plus the empty /
 // loading / error states.

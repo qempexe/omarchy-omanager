@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Layouts
-import "Model.js" as Model
+import "../js/Model.js" as Model
+import "../browse"
+import "../controls"
 
 // The whole manager UI, drawn: one rounded panel,
 // a header card, underlined tabs, one content card of rows, and the Esc footer.

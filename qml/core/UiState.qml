@@ -1,5 +1,5 @@
 import QtQuick
-import "Model.js" as Model
+import "../js/Model.js" as Model
 
 // All of Omanager's window state, kept in its own item (not in Panel) so none of
 // these names can collide with members of the shell's Panel base type.

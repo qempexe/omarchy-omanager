@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
-import "Model.js" as Model
+import "../js/Model.js" as Model
+import "../controls"
 
 // One plugin, as a card (grid), a row (list) or a dense table row (compact).
 // Everything shown here comes from the catalog and is treated as plain text.
