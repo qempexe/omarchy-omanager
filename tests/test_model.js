@@ -224,10 +224,17 @@ const ids = r => r.items.map(p => p.id);
   assert.deepStrictEqual(M.parseGitLog(""), []);
 
   const recent = M.gitLogArgs("/home/me/plugins/x.y", false);
-  assert.deepStrictEqual(recent.slice(0, 4), ["git", "-C", "/home/me/plugins/x.y", "log"]);
+  const at = recent.indexOf("-C");
+  assert.deepStrictEqual(recent.slice(at, at + 3), ["-C", "/home/me/plugins/x.y", "log"]);
+  for (const c of ["core.hooksPath=/dev/null", "core.fsmonitor=", "protocol.allow=never"])
+    assert.ok(recent.includes(c), "git runs with " + c);
   assert.ok(!recent.includes("HEAD..FETCH_HEAD"), "recent history is not ranged");
   assert.ok(M.gitLogArgs("/p/x", true).includes("HEAD..FETCH_HEAD"), "incoming history is ranged");
-  assert.deepStrictEqual(M.gitFetchArgs("/p/x"), ["git", "-C", "/p/x", "fetch", "--quiet", "origin", "HEAD"]);
+  const f = M.gitFetchArgs("/p/x", "https://github.com/o/r");
+  assert.deepStrictEqual(f.slice(f.indexOf("fetch")), ["fetch", "--quiet", "--no-tags", "--", "https://github.com/o/r.git", "HEAD"]);
+  assert.ok(f.includes("core.hooksPath=/dev/null"));
+  assert.strictEqual(M.gitFetchArgs("/p/x", "ext::sh -c id"), null, "only a plain repository address is fetched");
+  assert.strictEqual(M.gitFetchArgs("/p/x", ""), null, "no address, no fetch");
 })();
 
 (function commands() {

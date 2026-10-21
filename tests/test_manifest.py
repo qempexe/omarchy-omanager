@@ -83,7 +83,8 @@ class ManifestTests(unittest.TestCase):
         """Commands must be argument arrays; nothing should go through sh -c."""
         for name in ("qml/Service.qml", "qml/js/Model.js"):
             code = read(name)
-            self.assertNotRegex(code, r'"sh"|"bash"|"-c"|\beval\(|new Function')
+            # git's own `-c name=value` is fine; a bare "-c" would be a shell's
+            self.assertNotRegex(code, r'"sh"|"bash"|"-c"\s*,\s*"[^"=]*"|\beval\(|new Function')
 
     def test_no_native_editable_text_input(self):
         """Qt's TextInput / TextEdit / TextField carry their own clipboard handling, which

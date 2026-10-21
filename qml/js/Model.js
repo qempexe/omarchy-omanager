@@ -641,16 +641,30 @@ function healthOf(installedList, births, gitDirs, catalogMap) {
 }
 
 // ---- git history (changelog in the detail pane) --------------------------------
+// The plugin folders hold other people's repositories, so git runs with the bits
+// that could start a program turned off: no hooks, no fsmonitor, no signature
+// checks, no saved credentials, and https as the only way out.
+function gitBase(dirPath) {
+    return ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=",
+            "-c", "log.showSignature=false", "-c", "credential.helper=",
+            "-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+            "-C", str(dirPath)]
+}
+
 // One line per commit: abbreviated hash, author date, subject, tab-separated.
 function gitLogArgs(dirPath, incoming) {
-    var argv = ["git", "-C", str(dirPath), "log", "-n", "20",
-                "--pretty=format:%h\t%ad\t%s", "--date=short"]
+    var argv = gitBase(dirPath).concat(["log", "-n", "20", "--no-color",
+                "--pretty=format:%h\t%ad\t%s", "--date=short"])
     if (incoming) argv.push("HEAD..FETCH_HEAD")
     return argv
 }
 
-function gitFetchArgs(dirPath) {
-    return ["git", "-C", str(dirPath), "fetch", "--quiet", "origin", "HEAD"]
+// What an update would bring in is fetched from the catalog's address for the
+// plugin, not from whatever remote the folder has configured. null without one.
+function gitFetchArgs(dirPath, repo) {
+    var url = safeRepoUrl(repo)
+    if (!url) return null
+    return gitBase(dirPath).concat(["fetch", "--quiet", "--no-tags", "--", url, "HEAD"])
 }
 
 function parseGitLog(text) {

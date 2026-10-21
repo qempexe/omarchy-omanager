@@ -114,6 +114,11 @@ Item {
     }
     function healthFor(id) { return healthMap[id] || null }
 
+    function catalogEntry(id) {
+        for (var i = 0; i < catalog.length; i++) if (catalog[i].id === id) return catalog[i]
+        return null
+    }
+
     // `omarchy plugin list` has no version field, so an installed plugin's
     // version, directory and install time all come from a scan of its
     // manifest.json directory. The pieces land at different times, so every path
@@ -504,8 +509,18 @@ Item {
         histDir = d
         histIncoming = incoming === true
         setHistory(id, { state: "loading", incoming: histIncoming, lines: [], error: "" })
-        if (histIncoming) fetchProc.start(Model.gitFetchArgs(pluginsDir + "/" + d))
-        else startHistoryLog()
+        if (histIncoming) {
+            var entry = catalogEntry(id)
+            var argv = Model.gitFetchArgs(pluginsDir + "/" + d, entry ? entry.repo : "")
+            if (!argv) {
+                setHistory(id, { state: "error", incoming: true, lines: [],
+                    error: "This plugin has no repository address in the catalog." })
+                return
+            }
+            fetchProc.start(argv)
+        } else {
+            startHistoryLog()
+        }
     }
 
     function startHistoryLog() {
