@@ -66,7 +66,14 @@ class ManifestTests(unittest.TestCase):
     def test_schema_js_matches_manifest(self):
         schema_js = read("qml/js/Schema.js")
         groups = json.loads(re.search(r"var groups = (.*?);\n\nvar defaults", schema_js, re.S).group(1))
-        items = {i["key"]: i for g in groups for i in g["items"]}
+        items = {}
+        for g in groups:
+            for i in g["items"]:
+                if i["kind"] == "palette":   # a row of colors: each one is its own setting
+                    for t in i["targets"]:
+                        items[t["key"]] = {"fallback": i["fallback"][t["key"]]}
+                else:
+                    items[i["key"]] = i
         self.assertEqual(set(items), {s["key"] for s in self.bw["schema"]})
         for s in self.bw["schema"]:
             self.assertEqual(items[s["key"]]["fallback"], s["defaultValue"], s["key"])

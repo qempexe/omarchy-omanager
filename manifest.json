@@ -30,7 +30,10 @@
     "defaultSection": "right",
     "defaults": {
       "colorMode": "theme",
+      "customBg": "#141414",
+      "customFg": "#e0e0e0",
       "accentColor": "#ff6a1f",
+      "textColor": "auto",
       "cardStyle": "soft",
       "density": "comfortable",
       "cornerRadius": 4,
@@ -73,19 +76,46 @@
         "label": "Colors",
         "options": [
           "theme",
+          "palette",
+          "borders",
           "custom",
-          "mono",
-          "category"
+          "monochrome"
         ],
         "defaultValue": "theme",
-        "description": "Follow theme matches your bar. My color uses the accent below. Monochrome removes every hue. By category tints each category differently."
+        "description": "Follow theme matches your Omarchy theme live. Theme palette gives every category its own color from the theme. Window borders takes the colors of your theme's window border, gradient and all. Custom lets you choose the background, text and accent. Monochrome removes every hue."
+      },
+      {
+        "key": "customBg",
+        "type": "string",
+        "label": "Custom background",
+        "defaultValue": "#141414",
+        "description": "Background and accent color the window. Text colors it too, and anywhere when Text is set to My text color."
+      },
+      {
+        "key": "customFg",
+        "type": "string",
+        "label": "Custom text",
+        "defaultValue": "#e0e0e0",
+        "description": "Background and accent color the window. Text colors it too, and anywhere when Text is set to My text color."
       },
       {
         "key": "accentColor",
         "type": "string",
-        "label": "My accent color",
+        "label": "Custom accent",
         "defaultValue": "#ff6a1f",
-        "description": "Pick one, or type a hex like #ff6a1f."
+        "description": "Background and accent color the window. Text colors it too, and anywhere when Text is set to My text color."
+      },
+      {
+        "key": "textColor",
+        "type": "enum",
+        "label": "Text",
+        "options": [
+          "auto",
+          "theme",
+          "custom"
+        ],
+        "defaultValue": "auto",
+        "description": "Always readable keeps your theme's text color, and switches to black or white when the window is too light or too dark for it. My text color uses the Text color from Custom colors."
       },
       {
         "key": "cardStyle",

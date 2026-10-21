@@ -25,6 +25,34 @@ Item {
         return ui.cfg && ui.cfg[key] !== undefined ? ui.cfg[key] : Schema.defaults[key]
     }
 
+    // A row's value: one setting, or for a palette row its colors as { key: value }.
+    function rowValue(item) {
+        if (item.kind !== "palette") return val(item.key)
+        var o = {}
+        for (var i = 0; i < item.targets.length; i++) o[item.targets[i].key] = val(item.targets[i].key)
+        return o
+    }
+
+    function same(item) {
+        if (item.kind !== "palette") return String(val(item.key)) === String(item.fallback)
+        for (var i = 0; i < item.targets.length; i++) {
+            var k = item.targets[i].key
+            if (String(val(k)).toLowerCase() !== String(item.fallback[k]).toLowerCase()) return false
+        }
+        return true
+    }
+
+    function edit(item, v) {
+        if (!ui.store) return
+        if (item.kind !== "palette") { ui.store.set(item.key, v); return }
+        if (v && v.reset) {
+            for (var i = 0; i < item.targets.length; i++)
+                ui.store.set(item.targets[i].key, item.fallback[item.targets[i].key])
+        } else if (v && v.key) {
+            ui.store.set(v.key, v.value)
+        }
+    }
+
     // Window size is set by the window manager while the manager is popped out,
     // so these two settings have no effect there. Shown, but locked.
     function offHere(item) {
@@ -43,20 +71,26 @@ Item {
     function matches(item) {
         var f = filter.trim().toLowerCase()
         if (f === "") return true
-        return (item.label + " " + item.hint).toLowerCase().indexOf(f) >= 0
+        return (item.label + " " + item.hint + " " + (item.section || "")).toLowerCase().indexOf(f) >= 0
     }
 
     // the rows to show: the chosen group, or every match while searching.
-    // `head` is the group title, set on the first row of each group while searching.
+    // `head` is the heading over a row: the group title while searching, otherwise
+    // the row's section when it starts a new one.
     readonly property var rows: {
         var out = []
         for (var g = 0; g < Schema.groups.length; g++) {
             if (!searching && g !== group) continue
             var items = Schema.groups[g].items
             var first = true
+            var lastSection = ""
             for (var i = 0; i < items.length; i++) {
                 if (!matches(items[i])) continue
-                out.push({ item: items[i], head: (searching && first) ? Schema.groups[g].title : "" })
+                var section = items[i].section || ""
+                var head = searching ? (first ? Schema.groups[g].title : "")
+                                     : (section !== lastSection ? section : "")
+                out.push({ item: items[i], head: head })
+                lastSection = section
                 first = false
             }
         }
@@ -69,7 +103,7 @@ Item {
         for (var g = 0; g < Schema.groups.length; g++) {
             var items = Schema.groups[g].items
             for (var i = 0; i < items.length; i++)
-                if (String(val(items[i].key)) !== String(items[i].fallback)) n++
+                if (!same(items[i])) n++
         }
         return n
     }
@@ -220,11 +254,12 @@ Item {
                                 defaultValue: modelData.item.fallback
                                 dimmed: root.dimmed(modelData.item)
                                 locked: root.offHere(modelData.item)
-                                value: root.val(modelData.item.key)
+                                value: root.rowValue(modelData.item)
+                                targets: modelData.item.targets || []
                                 onEdited: function(v) {
                                     if (root.offHere(modelData.item)) return
                                     if (modelData.item.key === "viewMode") ui.setView(v)
-                                    else if (ui.store) ui.store.set(modelData.item.key, v)
+                                    else root.edit(modelData.item, v)
                                 }
                             }
                         }

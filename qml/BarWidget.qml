@@ -44,8 +44,11 @@ BarWidget {
 
     // ---- settings: every key read here is declared in manifest.json --------
     // BEGIN GENERATED SETTINGS (tools/gen.py)
-    readonly property string opt_colorMode: pick(over("colorMode", setting("colorMode", "theme")), ["theme", "custom", "mono", "category"], "theme")
+    readonly property string opt_colorMode: pick(over("colorMode", setting("colorMode", "theme")), ["theme", "palette", "borders", "custom", "monochrome"], "theme")
+    readonly property string opt_customBg: String(over("customBg", setting("customBg", "#141414")))
+    readonly property string opt_customFg: String(over("customFg", setting("customFg", "#e0e0e0")))
     readonly property string opt_accentColor: String(over("accentColor", setting("accentColor", "#ff6a1f")))
+    readonly property string opt_textColor: pick(over("textColor", setting("textColor", "auto")), ["auto", "theme", "custom"], "auto")
     readonly property string opt_cardStyle: pick(over("cardStyle", setting("cardStyle", "soft")), ["soft", "outline", "flat"], "soft")
     readonly property string opt_density: pick(over("density", setting("density", "comfortable")), ["compact", "comfortable", "spacious"], "comfortable")
     readonly property int opt_cornerRadius: whole(over("cornerRadius", setting("cornerRadius", 4)), 0, 20, 4)
@@ -83,7 +86,10 @@ BarWidget {
 
     readonly property var cfg: ({
         colorMode: opt_colorMode,
+        customBg: opt_customBg,
+        customFg: opt_customFg,
         accentColor: opt_accentColor,
+        textColor: opt_textColor,
         cardStyle: opt_cardStyle,
         density: opt_density,
         cornerRadius: opt_cornerRadius,

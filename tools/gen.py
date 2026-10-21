@@ -11,6 +11,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 PLUGIN_ID = "io.github.qempexe.omanager"
 
 # control (enum only) picks how the settings window draws a choice:
+#   "scheme" a tile per color scheme, with a tiny window drawn in its colors
 #   "tiles"  big tiles with a little picture of each option (few, visual choices)
 #   "seg"    one segmented bar (short choices, up to about 5)
 #   "chips"  wrapping chips (long lists)
@@ -30,6 +31,21 @@ def S(key, label, default, hint, presets=None, kind="string", when=None, maxLeng
     return dict(key=key, label=label, kind=kind, fallback=default, hint=hint,
                 presets=presets or [], when=when, maxLength=maxLength)
 
+# A row of colors edited together (pick one, then a swatch or a hex). Each target is
+# its own setting in manifest.json and BarWidget.qml: (key, label, default).
+def P(key, label, targets, hint, presets, when=None):
+    return dict(key=key, label=label, kind="palette", hint=hint, presets=presets, when=when,
+                fallback={k: d for k, _, d in targets},
+                targets=[{"key": k, "label": l} for k, l, _ in targets])
+
+# Puts a small heading over a run of rows in the settings window.
+def sec(title, items):
+    return [dict(it, section=title) for it in items]
+
+SWATCHES = ["#141414", "#1d1510", "#1a1b26", "#282a36", "#2e3440", "#2d353b", "#1f1f28", "#3b2a1f",
+            "#e0e0e0", "#eadbc8", "#ffffff", "#c0caf5", "#d8dee9", "#dcd7ba", "#f8f8f2", "#e0def4",
+            "#d4a35a", "#c8925a", "#7aa2f7", "#cba6f7", "#a7c080", "#88c0d0", "#fabd2f", "#ff6a1f"]
+
 SORTS = ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "rated", "az"]
 SORT_LABELS = {"newest": "Newly uploaded", "listed": "As listed",
                "updated": "Recently upgraded", "fresh": "New or upgraded",
@@ -37,14 +53,24 @@ SORT_LABELS = {"newest": "Newly uploaded", "listed": "As listed",
                "rated": "Best install rate", "az": "A to Z"}
 
 SPEC = [
+  ("Colors", sec("Scheme", [
+    E("colorMode", "Colors", "theme", ["theme", "palette", "borders", "custom", "monochrome"],
+      {"theme": "Follow theme", "palette": "Theme palette", "borders": "Window borders",
+       "custom": "Custom", "monochrome": "Monochrome"},
+      "Follow theme matches your Omarchy theme live. Theme palette gives every category its own color from the theme. "
+      "Window borders takes the colors of your theme's window border, gradient and all. "
+      "Custom lets you choose the background, text and accent. Monochrome removes every hue.", control="scheme"),
+    P("customColors", "Custom colors",
+      [("customBg", "Background", "#141414"), ("customFg", "Text", "#e0e0e0"), ("accentColor", "Accent", "#ff6a1f")],
+      "Background and accent color the window. Text colors it too, and anywhere when Text is set to My text color.",
+      SWATCHES, when=[{"key": "colorMode", "is": ["custom"]}]),
+  ]) + sec("Text", [
+    E("textColor", "Text", "auto", ["auto", "theme", "custom"],
+      {"auto": "Always readable", "theme": "Theme", "custom": "My text color"},
+      "Always readable keeps your theme's text color, and switches to black or white when the window is too light or too dark for it. "
+      "My text color uses the Text color from Custom colors."),
+  ])),
   ("Appearance", [
-    E("colorMode", "Colors", "theme", ["theme", "custom", "mono", "category"],
-      {"theme": "Follow theme", "custom": "My color", "mono": "Monochrome", "category": "By category"},
-      "Follow theme matches your bar. My color uses the accent below. Monochrome removes every hue. By category tints each category differently.", control="tiles"),
-    S("accentColor", "My accent color", "#ff6a1f",
-      "Pick one, or type a hex like #ff6a1f.",
-      presets=["#ff6a1f", "#7aa2f7", "#bb9af7", "#7dcfff", "#9ece6a", "#e0af68", "#f7768e", "#c0caf5"],
-      kind="color", when=[{"key": "colorMode", "is": ["custom"]}], maxLength=7),
     E("cardStyle", "Card style", "soft", ["soft", "outline", "flat"],
       {"soft": "Soft", "outline": "Outline", "flat": "Flat"},
       "Soft fills cards lightly, outline draws a border only, flat has neither.", control="tiles"),
@@ -114,7 +140,15 @@ SPEC = [
   ]),
 ]
 
-ITEMS = [dict(it, group=g) for g, items in SPEC for it in items]
+# The settings one by one: a palette row counts as its colors.
+def expand(it):
+    if it["kind"] != "palette":
+        return [it]
+    labels = {t["key"]: t["label"] for t in it["targets"]}
+    return [dict(key=k, label="Custom " + labels[k].lower(), kind="color", fallback=d, hint=it["hint"], presets=it["presets"],
+                 when=it.get("when"), maxLength=7) for k, d in it["fallback"].items()]
+
+ITEMS = [dict(x, group=g) for g, items in SPEC for it in items for x in expand(it)]
 
 def manifest_item(it):
     t = {"enum": "enum", "int": "integer", "bool": "boolean", "string": "string", "color": "string"}[it["kind"]]

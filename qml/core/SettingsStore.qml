@@ -91,6 +91,9 @@ Item {
         var merged = {}
         for (var k in fromFile) merged[k] = fromFile[k]
         for (var j in values) merged[j] = values[j]
+        // two color schemes have new names since 2.0: Monochrome, and Theme palette (was By category)
+        var renamed = { mono: "monochrome", category: "palette" }
+        if (renamed[merged.colorMode] !== undefined) merged.colorMode = renamed[merged.colorMode]
         values = merged
         loaded = true
         changed()

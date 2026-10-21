@@ -12,8 +12,10 @@ import "../controls"
 //                 to 5 options and chips for more.
 //         int     slider with - / + buttons
 //         bool    switch
+//                   scheme a tile per color scheme, with a tiny window in its colors
 //         string  text field (+ optional preset chips)
 //         color   swatches + hex field
+//         palette a few colors edited together: pick one, then a swatch or a hex
 Item {
     id: root
 
@@ -27,6 +29,13 @@ Item {
     property var labels: ({})
     property var presets: []
     property var value: null
+    property var targets: []          // palette: [{ key, label }]
+    property int target: 0            // palette: the color being edited
+    readonly property string targetKey: targets.length > 0 ? targets[Math.min(target, targets.length - 1)].key : ""
+    function colorOf(key) {
+        var v = value && typeof value === "object" ? value[key] : undefined
+        return validHex(String(v)) ? String(v) : "#000000"
+    }
 
     // What the control shows. A choice is shown the moment it is made, so the control
     // never waits for the settings round trip; it follows the real value again as soon
@@ -65,7 +74,13 @@ Item {
     readonly property string mode: kind !== "enum" ? ""
         : (control !== "" ? control : (options.length <= 5 ? "seg" : "chips"))
     readonly property bool boolValue: current === true || current === "true"
-    readonly property bool atDefault: same(current, defaultValue)
+    // palette rows hold { key: color }: equal when every color is
+    function sameColors(a, b) {
+        if (!a || !b) return false
+        for (var k in b) if (str(a[k]).toLowerCase() !== str(b[k]).toLowerCase()) return false
+        return true
+    }
+    readonly property bool atDefault: kind === "palette" ? sameColors(value, defaultValue) : same(current, defaultValue)
     readonly property real span: Math.max(1e-9, max - min)
     readonly property real frac: Math.max(0, Math.min(1, (Number(current) - min) / span))
     readonly property real defFrac: Math.max(0, Math.min(1, (Number(defaultValue) - min) / span))
@@ -135,7 +150,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.commit(root.defaultValue)
+                    onClicked: root.kind === "palette" ? root.edited({ reset: true }) : root.commit(root.defaultValue)
                 }
             }
 
@@ -200,6 +215,228 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.commit(modelData)
                     }
+                }
+            }
+        }
+
+        // ---- enum: color schemes, each a tiny window in its colors --------------------
+        GridLayout {
+            Layout.fillWidth: true
+            visible: root.mode === "scheme"
+            columns: Math.max(1, Math.min(5, root.options.length))
+            columnSpacing: ui.px(8)
+            rowSpacing: ui.px(8)
+
+            Repeater {
+                model: root.mode === "scheme" ? root.options : []
+                delegate: Rectangle {
+                    id: stile
+                    readonly property bool on: root.same(root.current, modelData)
+                    readonly property var sc: root.ui.schemeColors(String(modelData))
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: ui.px(84)
+                    radius: root.rad(1.4)
+                    color: on ? ui.accentTint(0.16) : ui.tint(scArea.containsMouse ? 0.09 : 0.04)
+                    border.width: on ? 1.5 : 1
+                    border.color: on ? ui.accent : ui.tint(0.08)
+                    Behavior on color { enabled: ui.animations; ColorAnimation { duration: 100 } }
+
+                    Rectangle {   // the window: a header line and three plugin rows
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: ui.px(9)
+                        width: parent.width - ui.px(18)
+                        height: ui.px(42)
+                        radius: 4
+                        color: stile.sc.bg
+                        border.width: 1
+                        border.color: Qt.rgba(stile.sc.fg.r, stile.sc.fg.g, stile.sc.fg.b, 0.18)
+                        Rectangle {
+                            x: 5; y: 5
+                            width: parent.width * 0.4; height: 3; radius: 1.5
+                            color: Qt.rgba(stile.sc.fg.r, stile.sc.fg.g, stile.sc.fg.b, 0.75)
+                        }
+                        Repeater {
+                            model: 3
+                            delegate: Item {
+                                x: 5
+                                y: 12 + index * 9
+                                width: parent.width - 10
+                                height: 6
+                                Rectangle {
+                                    width: 6; height: 6; radius: 1.5
+                                    color: stile.sc.acs ? stile.sc.acs[index] : stile.sc.ac
+                                }
+                                Rectangle {
+                                    x: 10; anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width * (0.62 - index * 0.12); height: 2; radius: 1
+                                    color: Qt.rgba(stile.sc.fg.r, stile.sc.fg.g, stile.sc.fg.b, 0.45)
+                                }
+                                Rectangle {
+                                    visible: index === 0
+                                    anchors.right: parent.right
+                                    width: 10; height: 5; radius: 2
+                                    color: stile.sc.ac
+                                }
+                            }
+                        }
+                    }
+                    Txt {
+                        ui: root.ui
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: ui.px(8)
+                        width: parent.width - ui.px(8)
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        text: root.labelFor(modelData)
+                        font.pixelSize: ui.fs(10)
+                        font.weight: stile.on ? Font.DemiBold : Font.Normal
+                        opacity: stile.on ? 1.0 : 0.75
+                    }
+                    MouseArea {
+                        id: scArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.commit(modelData)
+                    }
+                }
+            }
+        }
+
+        // ---- palette: pick a color, then a swatch or a hex ----------------------------
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.kind === "palette"
+            spacing: ui.px(10)
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: ui.px(34)
+                radius: root.rad(1.4)
+                color: ui.tint(0.05)
+                border.width: 1
+                border.color: ui.tint(0.08)
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    spacing: 2
+                    Repeater {
+                        model: root.kind === "palette" ? root.targets : []
+                        delegate: Rectangle {
+                            id: tg
+                            readonly property bool on: index === root.target
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            Layout.fillHeight: true
+                            radius: root.rad(1.1)
+                            color: on ? ui.accent : (tgArea.containsMouse ? ui.tint(0.08) : "transparent")
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: ui.px(6)
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: ui.px(11); height: width; radius: width / 2
+                                    color: root.colorOf(modelData.key)
+                                    border.width: 1
+                                    border.color: tg.on ? ui.accentText : ui.tint(0.35)
+                                }
+                                Txt {
+                                    ui: root.ui
+                                    text: modelData.label
+                                    color: tg.on ? ui.accentText : ui.fg
+                                    font.pixelSize: ui.fs(11)
+                                    font.weight: tg.on ? Font.DemiBold : Font.Normal
+                                }
+                            }
+                            MouseArea {
+                                id: tgArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.target = index
+                            }
+                        }
+                    }
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 8
+                columnSpacing: ui.px(8)
+                rowSpacing: ui.px(8)
+                Repeater {
+                    model: root.kind === "palette" ? root.presets : []
+                    delegate: Rectangle {
+                        readonly property bool on: root.colorOf(root.targetKey).toLowerCase() === String(modelData).toLowerCase()
+                        Layout.alignment: Qt.AlignHCenter
+                        implicitWidth: ui.px(24); implicitHeight: implicitWidth
+                        radius: width / 2
+                        color: modelData
+                        border.width: on ? 2 : 1
+                        border.color: on ? ui.accent : ui.tint(0.25)
+                        scale: swArea.containsMouse ? 1.12 : 1.0
+                        Behavior on scale { enabled: ui.animations; NumberAnimation { duration: 90 } }
+                        MouseArea {
+                            id: swArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.edited({ key: root.targetKey, value: String(modelData).toLowerCase() })
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                spacing: ui.px(8)
+                Rectangle {
+                    implicitWidth: ui.px(28); implicitHeight: implicitWidth
+                    radius: root.rad(1)
+                    color: root.colorOf(root.targetKey)
+                    border.width: 1
+                    border.color: ui.tint(0.25)
+                }
+                Rectangle {
+                    implicitWidth: ui.px(120)
+                    implicitHeight: ui.px(28)
+                    radius: root.rad(1)
+                    color: ui.tint(0.05)
+                    border.width: 1
+                    border.color: hexBox.activeFocus ? ui.tint(0.28) : ui.tint(0.08)
+                    clip: true
+                    PasteInput {
+                        id: hexBox
+                        key: "palette:" + root.settingKey
+                        service: root.ui ? root.ui.service : null
+                        anchors.fill: parent
+                        anchors.leftMargin: ui.px(9)
+                        anchors.rightMargin: ui.px(9)
+                        color: ui.fg
+                        font.family: ui.fontName
+                        font.pixelSize: ui.fs(11)
+                        maximumLength: 7
+                        text: root.kind === "palette" ? root.colorOf(root.targetKey) : ""
+                        onEditingFinished: {
+                            if (!root.validHex(text)) { text = root.colorOf(root.targetKey); return }
+                            if (text.toLowerCase() !== root.colorOf(root.targetKey).toLowerCase())
+                                root.edited({ key: root.targetKey, value: text.toLowerCase() })
+                        }
+                        Keys.onEscapePressed: { text = root.colorOf(root.targetKey); focus = false }
+                        Connections {
+                            target: root
+                            function onTargetKeyChanged() { hexBox.text = root.colorOf(root.targetKey) }
+                            function onValueChanged() { hexBox.text = root.colorOf(root.targetKey) }
+                        }
+                    }
+                }
+                Txt {
+                    ui: root.ui
+                    text: "Pick a swatch, or type a hex like #c8925a"
+                    font.pixelSize: ui.fs(9)
+                    opacity: 0.5
                 }
             }
         }

@@ -142,7 +142,7 @@ Flickable {
                     count: modelData.count
                     on: ui.category === modelData.name
                     tone: ui.tone(modelData.name)
-                    dot: ui.cfgSafe.colorMode === "category"
+                    dot: ui.colorModeKey === "palette" || ui.colorModeKey === "borders"
                     onClicked: ui.category = ui.category === modelData.name ? "" : modelData.name
                 }
             }

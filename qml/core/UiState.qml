@@ -25,7 +25,8 @@ Item {
 
     // ---- theme & spacing helpers (used by every child as ui.*) ----------------
     readonly property var cfgSafe: cfg ? cfg : ({
-        colorMode: "theme", accentColor: "#ff6a1f", cardStyle: "soft", density: "comfortable",
+        colorMode: "theme", customBg: "#141414", customFg: "#e0e0e0", accentColor: "#ff6a1f", textColor: "auto",
+        cardStyle: "soft", density: "comfortable",
         cornerRadius: 4, fontScale: 100, surfaceTint: 0, showPreviews: true, frame: false, openAs: "panel",
         windowWidth: 560, windowHeight: 680, viewMode: "list", columns: "auto", filtersPanel: "left",
         defaultSource: "community", defaultSort: "newest", recencyScope: "either", recencyDays: "any",
@@ -43,12 +44,16 @@ Item {
     readonly property bool frameOn: cfgSafe.frame === true
     readonly property bool showPreviews: cfgSafe.showPreviews === true
     readonly property int newBadgeDays: Number(cfgSafe.newBadgeDays)
-    readonly property string colorModeKey: cfgSafe.colorMode
     readonly property string filtersPanelKey: cfgSafe.filtersPanel
 
     // Colours handed in by BarWidget: the bar's own foreground and background.
     property color barFg: "white"
     property color barBg: "#121217"
+
+    // The theme's own colors and its window border, read by the service.
+    readonly property var themePalette: service ? service.themePalette : []
+    readonly property var borderColors: service ? service.borderColors : []
+    readonly property real borderAngle: service ? service.borderAngle : 0
 
     function lumOf(c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b }
     // Black or white, whichever reads better on colour c.
@@ -56,19 +61,31 @@ Item {
         return lumOf(c) > 0.5 ? Qt.rgba(0.08, 0.08, 0.08, 1) : Qt.rgba(0.96, 0.96, 0.96, 1)
     }
     function grey(l) { return Qt.rgba(l, l, l, 1) }
+    function hexOr(v, fallback) { return Qt.color(Model.validHex(v, fallback)) }
+    // Text has to read against the surface: too close to it, and it turns black or white.
+    function readable(c, on) { return Math.abs(lumOf(c) - lumOf(on)) >= 0.35 ? c : contrast(on) }
+
+    // ---- the color scheme (Settings > Colors) -------------------------------------
+    //   theme       the bar's own colors and the theme's accent
+    //   palette     the same, and every category gets a color from the theme's palette
+    //   borders     the accent and the category colors come from the window border
+    //   custom      your background, text and accent
+    //   monochrome  no hue at all: greys at the bar's brightness
+    readonly property string colorModeKey: cfgSafe.colorMode
+    readonly property bool mono: colorModeKey === "monochrome"
+    readonly property bool custom: colorModeKey === "custom"
 
     // The opaque base every surface paints. It is the bar's real background, so the
-    // bar panel and the pop-out window show the same colour (it used to be a neutral
-    // grey derived from the foreground, which is why the two looked different).
-    // Monochrome drops every hue: the surface becomes a grey at the bar's brightness.
+    // bar panel and the pop-out window show the same colour.
     readonly property color barSurface: Qt.rgba(barBg.r, barBg.g, barBg.b, 1)
-    readonly property color surface: mono ? grey(lumOf(barSurface)) : barSurface
+    readonly property color surface: custom ? hexOr(cfgSafe.customBg, "#141414")
+        : (mono ? grey(lumOf(barSurface)) : barSurface)
     readonly property bool lightSurface: lumOf(surface) > 0.5
-    // Text has to read against the surface. If the bar's foreground is too close to
-    // its background, fall back to black or white.
-    // Monochrome text is pure white or black, never a tinted foreground.
+    readonly property color customFg: hexOr(cfgSafe.customFg, "#e0e0e0")
     readonly property color fg: mono ? contrast(surface)
-        : (Math.abs(lumOf(barFg) - lumOf(surface)) >= 0.35 ? barFg : contrast(surface))
+        : (cfgSafe.textColor === "custom" ? customFg
+        : (cfgSafe.textColor === "theme" ? barFg
+        : readable(custom ? customFg : barFg, surface)))
     readonly property real lum: lumOf(fg)
     readonly property bool lightText: lum > 0.5
     // The layout (List + stage / Cards / List) is live UI state: it changes the
@@ -82,15 +99,33 @@ Item {
     }
     onCfgSafeChanged: if (viewOverride !== "" && cfgSafe.viewMode === viewOverride) viewOverride = ""
 
-    readonly property bool mono: cfgSafe.colorMode === "mono"
     // The shell theme's own accent (BarWidget looks it up; transparent when the
-    // shell does not expose one). "Follow theme" and "By category" use it for
-    // selected tiles, tabs and sliders, so the window matches the rest of the shell.
+    // shell does not expose one). It colors selected tiles, tabs and sliders, so
+    // the window matches the rest of the shell.
     property color themeAccent: "transparent"
     readonly property bool hasThemeAccent: themeAccent.a > 0
-    readonly property color accent: cfgSafe.colorMode === "custom"
-        ? Qt.color(Model.validHex(cfgSafe.accentColor, "#ff6a1f"))
-        : (!mono && hasThemeAccent ? Qt.rgba(themeAccent.r, themeAccent.g, themeAccent.b, 1) : fg)
+    readonly property color themeAc: hasThemeAccent ? Qt.rgba(themeAccent.r, themeAccent.g, themeAccent.b, 1) : fg
+    readonly property color accent: custom ? hexOr(cfgSafe.accentColor, "#ff6a1f")
+        : (mono ? fg
+        : (colorModeKey === "borders" && borderColors.length > 0 ? Qt.color(borderColors[0]) : themeAc))
+
+    // The colors of a scheme, for its tile in Settings: background, text, accent,
+    // and (palette, borders) three of the category colors it would use.
+    function schemeColors(name) {
+        if (name === "custom")
+            return { bg: hexOr(cfgSafe.customBg, "#141414"), fg: customFg, ac: hexOr(cfgSafe.accentColor, "#ff6a1f") }
+        if (name === "monochrome") {
+            var g = grey(lumOf(barSurface))
+            return { bg: g, fg: contrast(g), ac: contrast(g) }
+        }
+        var list = name === "borders" ? borderColors : (name === "palette" ? themePalette : [])
+        var n = list.length
+        if (n > 0)
+            return { bg: barSurface, fg: barFg, ac: name === "borders" ? Qt.color(list[0]) : themeAc,
+                     acs: [Qt.color(list[0]), Qt.color(list[Math.min(n - 1, 1)]), Qt.color(list[Math.min(n - 1, 2)])] }
+        return { bg: barSurface, fg: barFg, ac: themeAc }
+    }
+
     readonly property real accLum: 0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b
     readonly property color accentText: contrast(accent)
     // Status colours: the pastels used on dark bars vanish on light ones, so pick
@@ -127,11 +162,15 @@ Item {
     function px(n) {
         return Math.round(n * densityF)
     }
-    // Category color: hue per category in "By category" mode, otherwise the accent.
+    // Category color: with Theme palette, one of the theme's colors per category
+    // (a hue of its own when the theme has no palette); with Window borders, one of
+    // the border's colors; otherwise the accent.
     function tone(category) {
-        if (colorModeKey === "category")
-            return Qt.hsla(Model.hueOf(category), 0.55, lightSurface ? 0.38 : 0.68, 1)
-        return accent
+        var list = colorModeKey === "palette" ? themePalette : (colorModeKey === "borders" ? borderColors : null)
+        if (!list) return accent
+        var h = Model.hueOf(category)
+        if (list.length === 0) return Qt.hsla(h, 0.55, lightSurface ? 0.38 : 0.68, 1)
+        return readable(Qt.color(list[Math.floor(h * 360) % list.length]), surface)
     }
 
     // ---- filter state ----------------------------------------------------------

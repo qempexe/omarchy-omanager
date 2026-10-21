@@ -19,10 +19,6 @@ Item {
     readonly property color ink: ui.tint(0.40)
     readonly property color mid: ui.tint(0.22)
     readonly property color faint: ui.tint(0.10)
-    readonly property color custom: {
-        var h = String(ui.cfgSafe.accentColor)
-        return /^#[0-9a-fA-F]{6}$/.test(h) ? Qt.color(h) : Qt.color("#ff6a1f")
-    }
 
     // ---- Layout: viewMode -------------------------------------------------------
     Item {
@@ -130,26 +126,6 @@ Item {
             radius: 3; color: art.faint
             border.width: 1; border.color: art.ink
             Rectangle { x: 1; y: 1; width: parent.width - 2; height: 5; radius: 2; color: art.mid }
-        }
-    }
-
-    // ---- Colors: colorMode ------------------------------------------------------
-    Row {
-        visible: art.key === "colorMode"
-        anchors.centerIn: parent
-        spacing: 5
-        Repeater {
-            model: 4
-            Rectangle {
-                width: 14; height: 14; radius: 7
-                color: {
-                    var a = [1.0, 0.7, 0.45, 0.25][index]
-                    if (art.opt === "theme") return art.ui.tint([0.95, 0.55, 0.30, 0.15][index])
-                    if (art.opt === "custom") return Qt.rgba(art.custom.r, art.custom.g, art.custom.b, a)
-                    if (art.opt === "mono") return art.ui.grey([0.95, 0.6, 0.35, 0.15][index])
-                    return Qt.hsla([0.02, 0.30, 0.55, 0.80][index], 0.55, 0.6, 1)
-                }
-            }
         }
     }
 }
