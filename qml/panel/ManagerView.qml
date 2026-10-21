@@ -372,7 +372,7 @@ Item {
                                     width: parent.width
                                     elide: Text.ElideRight
                                     visible: searchField.text === "" && !searchField.activeFocus
-                                    text: ui.tabName === "settings" ? "Search settings\u2026" : "Search names, authors, tags\u2026"
+                                    text: ui.tabName === "settings" ? "Search settings\u2026" : "Search, or tag:media, kind:panel, @author\u2026"
                                     opacity: 0.4
                                 }
                             }

@@ -66,7 +66,7 @@ BarWidget {
     readonly property int opt_surfaceTint: whole(over("surfaceTint", setting("surfaceTint", 0)), 0, 30, 0)
     readonly property int opt_opacity: whole(over("opacity", setting("opacity", 97)), 50, 100, 97)
     readonly property string opt_defaultSource: pick(over("defaultSource", setting("defaultSource", "community")), ["community", "builtin", "all"], "community")
-    readonly property string opt_defaultSort: pick(over("defaultSort", setting("defaultSort", "newest")), ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "rated", "az"], "newest")
+    readonly property string opt_defaultSort: pick(over("defaultSort", setting("defaultSort", "newest")), ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "copies", "rank", "rated", "az", "kind"], "newest")
     readonly property string opt_recencyScope: pick(over("recencyScope", setting("recencyScope", "either")), ["either", "added", "updated"], "either")
     readonly property string opt_recencyDays: pick(over("recencyDays", setting("recencyDays", "any")), ["any", "7", "30", "90", "365"], "any")
     readonly property bool opt_verifiedOnly: flag(over("verifiedOnly", setting("verifiedOnly", false)), false)

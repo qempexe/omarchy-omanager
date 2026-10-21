@@ -124,9 +124,28 @@ Flickable {
 
         Section {
             ui: root.ui
-            title: "Trust"
-            Chip { ui: root.ui; label: "\u2713 Verified only"; on: ui.verifiedOnly; tone: ui.good; onClicked: ui.verifiedOnly = !ui.verifiedOnly }
+            title: "Verification"
+            Chip { ui: root.ui; label: "Any"; on: ui.verification === "any"; onClicked: ui.verification = "any" }
+            Chip { ui: root.ui; label: "\u2713 Verified"; on: ui.verification === "verified"; tone: ui.good; onClicked: ui.verification = "verified" }
+            Chip { ui: root.ui; label: "Unverified"; on: ui.verification === "unverified"; tone: ui.warn; onClicked: ui.verification = "unverified" }
             Chip { ui: root.ui; visible: root.onBrowse; label: "Hide installed"; on: ui.hideInstalled; onClicked: ui.hideInstalled = !ui.hideInstalled }
+        }
+
+        // the website's quick filters: Kids, VPN and Bar, and the AI, Games and Security tags
+        Section {
+            ui: root.ui
+            title: "Collections"
+            visible: ui.facets.collections.length > 0 || ui.collection !== ""
+            Repeater {
+                model: ui.facets.collections
+                delegate: Chip {
+                    ui: root.ui
+                    label: modelData.name
+                    count: modelData.count
+                    on: ui.collection === modelData.key
+                    onClicked: ui.collection = ui.collection === modelData.key ? "" : modelData.key
+                }
+            }
         }
 
         Section {

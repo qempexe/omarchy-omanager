@@ -195,7 +195,8 @@ Item {
     property string source: "community"
     property string category: ""
     property var tags: []
-    property bool verifiedOnly: false
+    property string collection: ""          // kids | vpn | bar | ai | games | security, or ""
+    property string verification: "any"     // any | verified | unverified
     property bool hideInstalled: false
     property string status: "any"
     property string scope: "either"
@@ -215,8 +216,11 @@ Item {
         { key: "hearts", label: "Most hearts" },
         { key: "stars", label: "Most stars" },
         { key: "views", label: "Most viewed" },
+        { key: "copies", label: "Most copied" },
+        { key: "rank", label: "Top ranked" },
         { key: "rated", label: "Best install rate" },
-        { key: "az", label: "A to Z" }
+        { key: "az", label: "A to Z" },
+        { key: "kind", label: "Plugin type" }
     ]
     // The Installed tab can also order by when a plugin first landed on disk.
     // That is a fact about the local directory, not the catalog, so the option
@@ -232,7 +236,8 @@ Item {
         source = c.defaultSource
         category = ""
         tags = []
-        verifiedOnly = c.verifiedOnly
+        collection = ""
+        verification = c.verifiedOnly ? "verified" : "any"
         hideInstalled = c.hideInstalled
         status = "any"
         scope = c.recencyScope
@@ -258,13 +263,13 @@ Item {
         if (sortKey === old.sort) sortKey = now.sort
         if (scope === old.scope) scope = now.scope
         if (days === old.days) days = now.days
-        if (verifiedOnly === old.verified) verifiedOnly = now.verified
+        if (verification === (old.verified ? "verified" : "any")) verification = now.verified ? "verified" : "any"
         if (hideInstalled === old.hide) hideInstalled = now.hide
         lastDefaults = now
     }
 
-    readonly property bool filtersActive: query !== "" || category !== "" || tags.length > 0
-        || status !== "any" || days !== 0 || verifiedOnly || hideInstalled
+    readonly property bool filtersActive: query !== "" || category !== "" || tags.length > 0 || collection !== ""
+        || status !== "any" || days !== 0 || verification !== (cfgSafe.verifiedOnly ? "verified" : "any") || hideInstalled
         || sortKey !== cfgSafe.defaultSort || (days !== 0 && scope !== cfgSafe.recencyScope)
         || (tabName === "browse" && source !== cfgSafe.defaultSource)
 
@@ -274,7 +279,7 @@ Item {
         else syncDefaults()
     }
     onTabNameChanged: {
-        status = "any"; category = ""; tags = []; selected = null
+        status = "any"; category = ""; tags = []; collection = ""; selected = null
         selectMode = false; selection = ({})
         if (tabName !== "installed" && sortKey === "installed") sortKey = cfgSafe.defaultSort
         recomputeTimer.restart()
@@ -282,7 +287,7 @@ Item {
 
     // ---- results ---------------------------------------------------------------------
     property var items: []
-    property var facets: ({ categories: [], tags: [] })
+    property var facets: ({ categories: [], tags: [], collections: [] })
     property int poolSize: 0
 
     function recompute() {
@@ -290,8 +295,8 @@ Item {
         var t = tabName
         if (t === "settings") return
         var o = {
-            query: query, source: source, category: category, tags: tags,
-            verifiedOnly: verifiedOnly, hideInstalled: hideInstalled, status: status,
+            query: query, source: source, category: category, tags: tags, collection: collection,
+            verification: verification, hideInstalled: hideInstalled, status: status,
             scope: scope, days: days, sort: sortKey, now: now, since: service.prevVisit,
             bookmarks: service.bookmarks, updateSet: updateSet, healthSet: healthSet
         }
@@ -361,7 +366,8 @@ Item {
     onSourceChanged: recomputeTimer.restart()
     onCategoryChanged: recomputeTimer.restart()
     onTagsChanged: recomputeTimer.restart()
-    onVerifiedOnlyChanged: recomputeTimer.restart()
+    onVerificationChanged: recomputeTimer.restart()
+    onCollectionChanged: recomputeTimer.restart()
     onHideInstalledChanged: recomputeTimer.restart()
     onStatusChanged: recomputeTimer.restart()
     onScopeChanged: recomputeTimer.restart()

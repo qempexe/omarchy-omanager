@@ -406,8 +406,11 @@ var groups = [
           "hearts",
           "stars",
           "views",
+          "copies",
+          "rank",
           "rated",
-          "az"
+          "az",
+          "kind"
         ],
         "labels": {
           "newest": "Newly uploaded",
@@ -417,10 +420,13 @@ var groups = [
           "hearts": "Most hearts",
           "stars": "Most stars",
           "views": "Most viewed",
+          "copies": "Most copied",
+          "rank": "Top ranked",
           "rated": "Best install rate",
-          "az": "A to Z"
+          "az": "A to Z",
+          "kind": "Plugin type"
         },
-        "hint": "Newly uploaded = first listed. As listed = the order the catalog feed returns them in (matches the website's default view). Recently upgraded = latest update. New or upgraded = whichever is most recent.",
+        "hint": "Newly uploaded = first listed. As listed = the order the catalog feed returns them in. Recently upgraded = latest new version or push. Top ranked adds up the places by hearts, copies, views and stars, like the website.",
         "control": "chips"
       },
       {
@@ -477,7 +483,7 @@ var groups = [
         "label": "Verified only",
         "kind": "bool",
         "fallback": false,
-        "hint": "Hide plugins without the Verified badge."
+        "hint": "Start on Verified in the Verification filter, which hides plugins without the badge."
       },
       {
         "key": "hideInstalled",

@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, imageBatchArgs, imageReport, imageInventory, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, imageBatchArgs, imageReport, imageInventory, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -263,6 +263,45 @@ const ids = r => r.items.map(p => p.id);
   assert.strictEqual(M.safeWebUrl("https://user@github.com/"), "", "user part");
   assert.strictEqual(M.safeWebUrl("http://github.com/"), "", "https only");
   assert.strictEqual(M.safeWebUrl("file:///etc/passwd"), "");
+})();
+
+(function websiteFilters() {
+  const cat = M.normalizeCatalog({ plugins: [
+    { id: "a.kids", name: "Letters", author: "Ana", category: "Productivity", tags: ["education"], kind: "Bar widget",
+      verificationStatus: "verified", repo: "https://github.com/a/kids", installAvailable: true },
+    { id: "b.vpn", name: "Mullvad Toggle", author: "Bo", category: "System", tags: ["security"], kind: "Panel",
+      verificationStatus: "unverified", repo: "https://github.com/b/vpn" },
+    { id: "c.bar", name: "Top Bar", author: "qempexe", category: "Appearance", tags: ["media"], kind: "Service",
+      verificationStatus: "verified", repo: "https://github.com/c/bar" },
+    { id: "d.suite", name: "Shell", author: "Cy", category: "Desktop", tags: ["ai"], kind: "Suite",
+      repositoryLayout: "suite", verificationStatus: "unverified", repo: "https://github.com/d/suite" }
+  ] });
+  const ids = (l) => l.map(p => p.id).sort();
+  assert.deepStrictEqual(ids(cat.filter(p => M.inCollection(p, "kids"))), ["a.kids"], "Kids from the education tag");
+  assert.deepStrictEqual(ids(cat.filter(p => M.inCollection(p, "vpn"))), ["b.vpn"], "VPN from the name");
+  assert.deepStrictEqual(ids(cat.filter(p => M.inCollection(p, "bar"))), ["c.bar"], "Bar: a bar-named service");
+  assert.deepStrictEqual(ids(cat.filter(p => M.inCollection(p, "ai"))), ["d.suite"]);
+
+  const q = M.parseQuery("Tag:Media kind:bar-widget @Qemp hello");
+  assert.deepStrictEqual(q, { words: ["hello"], tags: ["media"], kinds: ["bar-widget"], authors: ["qemp"] });
+  assert.strictEqual(M.kindKey("Bar widget"), "bar-widget");
+
+  const run = (o) => ids(M.query(cat, [], {}, Object.assign({ query: "", source: "community", sort: "az", days: 0, status: "any" }, o)).items);
+  assert.deepStrictEqual(run({ query: "tag:media @qempexe" }), ["c.bar"]);
+  assert.deepStrictEqual(run({ query: "kind:panel" }), ["b.vpn"]);
+  assert.deepStrictEqual(run({ verification: "verified" }), ["a.kids", "c.bar"]);
+  assert.deepStrictEqual(run({ verification: "unverified" }), ["b.vpn"], "a suite is neither verified nor unverified");
+  assert.deepStrictEqual(run({ verifiedOnly: true }), ["a.kids", "c.bar"], "the older verifiedOnly still works");
+  assert.deepStrictEqual(run({ collection: "vpn" }), ["b.vpn"]);
+  const facets = M.query(cat, [], {}, { query: "", source: "community", sort: "az", days: 0, status: "any" }).facets;
+  assert.deepStrictEqual(facets.collections.map(c => c.key), ["kids", "vpn", "bar", "ai", "security"]);
+
+  cat[0].hearts = 5; cat[0].views = 50; cat[1].stars = 9; cat[2].hearts = 5; cat[2].stars = 9; cat[2].views = 60;
+  const ranks = M.ranksOf(cat.slice());
+  assert.strictEqual(ranks["c.bar"], 1, "best places add up to the top rank");
+  assert.strictEqual(ranks["d.suite"], undefined, "no hearts, copies, views or stars: not ranked");
+  assert.deepStrictEqual(M.query(cat, [], {}, { query: "", source: "community", sort: "rank", days: 0, status: "any" }).items.map(p => p.id)[0], "c.bar");
+  assert.strictEqual(cat[0].rate, -1, "under 20 views at load: not rated");
 })();
 
 (function commands() {

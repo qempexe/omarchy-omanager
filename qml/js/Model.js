@@ -215,6 +215,20 @@ function isVerified(raw) {
     return st.indexOf("verified") >= 0 && st.indexOf("unverified") < 0 && st.indexOf("update") < 0
 }
 
+// Install rate, as the website ranks it: install-command copies per detail view,
+// by the lower bound of the 95% Wilson interval, so a few lucky copies cannot beat
+// a well-measured plugin. Fewer than 20 views, or nothing to install: not rated (-1).
+var RATE_MIN_VIEWS = 20
+function installRate(p, copies, views) {
+    if (!p.installable || !p.repo || views < RATE_MIN_VIEWS) return -1
+    return wilson(Math.min(copies, views), views)
+}
+
+// "Bar widget" -> "bar-widget": how the website writes a plugin type in kind:...
+function kindKey(kind) {
+    return str(kind).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join("-")
+}
+
 function wilson(pos, n) {
     if (n <= 0) return 0
     var z = 1.96, p = Math.min(1, pos / n)
@@ -247,6 +261,8 @@ function normalizePlugin(raw, fallbackId) {
     var thumb = pick(raw, ["previewThumbnail", "previewThumb", "thumbnail", "preview", "previewUrl",
                            "cardImage", "images.card", "assets.card", "previews.card"])
     var full = pick(raw, ["previewImage", "previewFull", "image", "screenshot", "images.detail"])
+    // the website's "Recent activity": a new version or a push, whichever is later
+    updated = Math.max(updated, ts(pick(raw, ["versionUpdatedAt"])))
     var views = num(pick(raw, ["views", "metrics.views", "engagement.views", "detailViews"]))
     var copies = num(pick(raw, ["copies", "metrics.copies", "engagement.copies", "commandCopies", "installs"]))
     var p = {
@@ -258,11 +274,14 @@ function normalizePlugin(raw, fallbackId) {
         category: str(pick(raw, ["category", "barWidget.category"]) || "Other").slice(0, 40),
         tags: words(pick(raw, ["tags", "topics", "keywords"])).slice(0, 8).map(function(t) { return t.slice(0, 30) }),
         kinds: words(pick(raw, ["kinds", "manifest.kinds", "kind"])).slice(0, 6),
+        kind: str(pick(raw, ["kind"])).slice(0, 40),
         stars: num(pick(raw, ["stars", "stargazers", "stargazersCount", "metrics.stars", "github.stars"])),
         hearts: num(pick(raw, ["hearts", "metrics.hearts", "engagement.hearts", "likes"])),
         views: views,
         copies: copies,
         verified: isVerified(raw),
+        // shell suites are listed but are not single plugins: neither verified nor unverified
+        suite: str(pick(raw, ["repositoryLayout"])) === "suite",
         repo: safeRepoUrl(repoRaw),
         preview: safeImageUrl(thumb || full),
         previewFull: safeImageUrl(full || thumb),
@@ -275,7 +294,8 @@ function normalizePlugin(raw, fallbackId) {
         local: false
     }
     p.fresh = Math.max(added, updated)
-    p.rate = wilson(copies, views)
+    p.kindKey = kindKey(p.kind)
+    p.rate = installRate(p, copies, views)
     p.lname = p.name.toLowerCase()
     p.hay = (p.name + " " + p.id + " " + p.description + " " + p.author + " " + p.category + " " +
              p.tags.join(" ")).toLowerCase()
@@ -346,7 +366,7 @@ function applyStats(catalog, stats) {
         if (!st) continue
         var p = catalog[i]
         p.views = st.views; p.hearts = st.hearts; p.copies = st.copies
-        p.rate = wilson(st.copies, st.views)
+        p.rate = installRate(p, st.copies, st.views)
         n++
     }
     return n
@@ -468,9 +488,12 @@ function pseudoRecord(rec, category, author) {
         id: rec.id, name: rec.name, description: rec.description, author: author,
         version: rec.version, category: category, tags: rec.kinds.slice(0, 4), kinds: rec.kinds,
         stars: 0, hearts: 0, views: 0, copies: 0, verified: rec.builtin,
-        repo: "", preview: "", previewFull: "", icon: "", installable: false, accent: "", addedAt: 0, updatedAt: 0, fresh: 0, rate: 0,
-        builtin: rec.builtin, local: !rec.builtin
+        repo: "", preview: "", previewFull: "", icon: "", installable: false, accent: "", addedAt: 0, updatedAt: 0, fresh: 0, rate: -1,
+        builtin: rec.builtin, local: !rec.builtin, suite: false,
+        kind: str(rec.kinds[0] || "").replace(/-/g, " ")
     }
+    p.kind = p.kind.charAt(0).toUpperCase() + p.kind.slice(1)
+    p.kindKey = kindKey(p.kind)
     p.lname = p.name.toLowerCase()
     p.hay = (p.name + " " + p.id + " " + p.description + " " + author + " " + category).toLowerCase()
     return p
@@ -536,6 +559,122 @@ function pool(catalog, installedList, installedMap, source) {
     return out
 }
 
+// ---- collections (the website's quick filters) ----------------------------------
+// Kids, VPN and Bar are worked out from the category, tags, id, name and description
+// the way the website does it; AI, Games and Security are plain tags.
+var COLLECTIONS = [
+    { key: "kids", label: "Kids" }, { key: "vpn", label: "VPN" }, { key: "bar", label: "Bar" },
+    { key: "ai", label: "AI" }, { key: "games", label: "Games" }, { key: "security", label: "Security" }
+]
+var VPN_IDS = ["antesmd.amneziawg", "io.github.feilian", "jwhall.omanodes"]
+var VPN_NAMES = ["airvpn", "eduvpn", "expressvpn", "fortivpn", "ivpn", "mullvad", "multivpn", "netbird", "nordvpn",
+                 "nymvpn", "openvpn", "protonvpn", "surfshark", "tailscale", "twingate", "vpn", "windscribe",
+                 "wireguard", "zerotier"]
+var VPN_ACTIONS = ["connect", "connection", "connections", "control", "controls", "disconnect", "launcher", "manager",
+                   "status", "switch", "switching", "toggle", "toggles", "tunnel", "tunnels"]
+var BAR_NAMES = ["bar", "menubar", "statusbar", "topbar", "waybar"]
+
+function terms(v) { return str(v).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean) }
+function identityTerms(p) { return terms(p.id.split(".").pop()).concat(terms(p.name)) }
+
+function isKids(p) {
+    return p.category === "Kids" || p.tags.indexOf("kids") >= 0 || p.tags.indexOf("education") >= 0
+}
+
+function isVpn(p) {
+    if (p.category === "VPN" || VPN_IDS.indexOf(p.id.toLowerCase()) >= 0) return true
+    const names = identityTerms(p)
+    if (names.some(t => VPN_NAMES.indexOf(t) >= 0) || p.tags.indexOf("vpn") >= 0) return true
+    if (p.tags.indexOf("security") < 0) return false
+    if (names.indexOf("warp") >= 0) return true
+    const desc = terms(p.description)
+    return desc.some(t => t === "vpn" || t === "wireguard") && desc.some(t => VPN_ACTIONS.indexOf(t) >= 0)
+}
+
+function isBar(p) {
+    if (p.category === "Bar" || p.category === "Bars" || p.kindKey === "bar") return true
+    if (p.category === "Hardware") return false
+    if (!identityTerms(p).some(t => BAR_NAMES.indexOf(t) >= 0)) return false
+    return p.kindKey === "service" || p.category === "Appearance"
+}
+
+function inCollection(p, key) {
+    switch (key) {
+    case "kids": return isKids(p)
+    case "vpn": return isVpn(p)
+    case "bar": return isBar(p)
+    case "ai": case "games": case "security": return p.tags.indexOf(key) >= 0
+    default: return true
+    }
+}
+
+// ---- search ---------------------------------------------------------------------
+// Plain words match names, ids, descriptions, authors, categories and tags. Like on
+// the website, `tag:media`, `kind:panel` and `@author` narrow it down exactly.
+function parseQuery(q) {
+    const out = { words: [], tags: [], kinds: [], authors: [] }
+    for (const t of tokens(q)) {
+        if (t.indexOf("tag:") === 0 && t.length > 4) out.tags.push(t.slice(4))
+        else if (t.indexOf("kind:") === 0 && t.length > 5) out.kinds.push(kindKey(t.slice(5)))
+        else if (t.charAt(0) === "@" && t.length > 1) out.authors.push(t.slice(1))
+        else out.words.push(t)
+    }
+    return out
+}
+
+function searchOk(p, q) {
+    for (const w of q.words) if (p.hay.indexOf(w) < 0) return false
+    for (const t of q.tags) if (p.tags.indexOf(t) < 0) return false
+    for (const k of q.kinds) if (p.kindKey.indexOf(k) !== 0) return false
+    const author = p.author.toLowerCase()
+    for (const a of q.authors) if (author.indexOf(a) < 0) return false
+    return true
+}
+
+// ---- verification ---------------------------------------------------------------
+// "any", "verified" or "unverified". Built-ins, local plugins and shell suites carry
+// no verification, so they only show under "any".
+function verificationOk(p, want) {
+    if (want !== "verified" && want !== "unverified") return true
+    if (p.builtin || p.local || p.suite) return false
+    return want === "verified" ? p.verified : !p.verified
+}
+
+// ---- Top ranked -----------------------------------------------------------------
+// The website's overall rank: each plugin's places by hearts, copies, views and
+// stars, added up; the smallest sum ranks first. Plugins with none of them aren't
+// ranked. Worked out once per catalog (and again when the stats arrive).
+var RANK_METRICS = ["hearts", "copies", "views", "stars"]
+var _rankCache = { catalog: null, stamp: "", ranks: {} }
+
+function ranksOf(catalog) {
+    let stamp = catalog.length + ":"
+    for (let i = 0; i < catalog.length; i += 97) stamp += catalog[i].views + "," + catalog[i].hearts + ";"
+    if (_rankCache.catalog === catalog && _rankCache.stamp === stamp) return _rankCache.ranks
+    const ranked = catalog.filter(p => !p.builtin && RANK_METRICS.some(m => p[m] > 0))
+    const sum = {}
+    for (const p of ranked) sum[p.id] = 0
+    for (const m of RANK_METRICS) {
+        const ordered = ranked.slice().sort((a, b) => (b[m] - a[m]) || (a.id < b.id ? -1 : 1))
+        let place = 0, prev = null
+        ordered.forEach((p, i) => {
+            if (p[m] !== prev) place = i + 1
+            prev = p[m]
+            sum[p.id] += place
+        })
+    }
+    const overall = ranked.slice().sort((a, b) => (sum[a.id] - sum[b.id]) || (a.id < b.id ? -1 : 1))
+    const ranks = {}
+    let place = 0, prev = null
+    overall.forEach((p, i) => {
+        if (sum[p.id] !== prev) place = i + 1
+        prev = sum[p.id]
+        ranks[p.id] = place
+    })
+    _rankCache = { catalog: catalog, stamp: stamp, ranks: ranks }
+    return ranks
+}
+
 function statusOk(p, status, ctx) {
     var inst = ctx.installedMap[p.id]
     switch (status) {
@@ -566,6 +705,15 @@ function sorter(key, ctx) {
     case "stars": return by(function(p) { return p.stars }, 1)
     case "views": return by(function(p) { return p.views }, 1)
     case "rated": return function(a, b) { return (b.rate - a.rate) || (b.views - a.views) }
+    case "copies": return by(function(p) { return p.copies }, 1)
+    case "rank": return function(a, b) {
+        var ra = ctx && ctx.ranks ? (ctx.ranks[a.id] || Infinity) : Infinity
+        var rb = ctx && ctx.ranks ? (ctx.ranks[b.id] || Infinity) : Infinity
+        return ra === rb ? 0 : (ra < rb ? -1 : 1)
+    }
+    case "kind": return function(a, b) {
+        return a.kindKey < b.kindKey ? -1 : (a.kindKey > b.kindKey ? 1 : (a.lname < b.lname ? -1 : (a.lname > b.lname ? 1 : 0)))
+    }
     case "az": return function(a, b) { return a.lname < b.lname ? -1 : (a.lname > b.lname ? 1 : 0) }
     default: return by(function(p) { return p.addedAt }, 1)
     }
@@ -583,28 +731,38 @@ function countMap(list, field) {
     return out
 }
 
-// st: { query, source, category, tags[], verifiedOnly, hideInstalled, status,
-//       scope, days, sort, now, since, bookmarks, updateSet }
+// st: { query, source, category, tags[], collection, verification ("any" |
+//       "verified" | "unverified"; verifiedOnly is the older way to ask for
+//       "verified"), hideInstalled, status, scope, days, sort, now, since,
+//       bookmarks, updateSet }
 function query(catalog, installedList, installedMap, st) {
     var ctx = { installedMap: installedMap, updateSet: st.updateSet || {}, bookmarks: st.bookmarks || {},
-                healthSet: st.healthSet || {}, since: st.since || 0 }
+                healthSet: st.healthSet || {}, since: st.since || 0,
+                ranks: st.sort === "rank" ? ranksOf(catalog) : null }
     var all = pool(catalog, installedList, installedMap, st.source)
-    var toks = tokens(st.query)
+    var q = parseQuery(st.query)
+    var verification = st.verification || (st.verifiedOnly ? "verified" : "any")
     var cutoff = st.days > 0 ? (st.now || Date.now()) - st.days * DAY : 0
     var base = []
     for (var i = 0; i < all.length; i++) {
         var p = all[i]
-        if (st.verifiedOnly && !p.verified) continue
+        if (!verificationOk(p, verification)) continue
         if (st.hideInstalled && installedMap[p.id]) continue
         if (!statusOk(p, st.status, ctx)) continue
         if (cutoff > 0 && !(dateOf(p, st.scope) >= cutoff)) continue
-        var ok = true
-        for (var t = 0; t < toks.length; t++) if (p.hay.indexOf(toks[t]) < 0) { ok = false; break }
-        if (ok) { p._i = i; base.push(p) }
+        if (searchOk(p, q)) { p._i = i; base.push(p) }
     }
-    var facets = { categories: countMap(base, "category"), tags: countMap(base, "tag").slice(0, 40) }
+    var collections = []
+    for (var c = 0; c < COLLECTIONS.length; c++) {
+        var n = 0
+        for (var b = 0; b < base.length; b++) if (inCollection(base[b], COLLECTIONS[c].key)) n++
+        if (n > 0) collections.push({ key: COLLECTIONS[c].key, name: COLLECTIONS[c].label, count: n })
+    }
+    var facets = { categories: countMap(base, "category"), tags: countMap(base, "tag").slice(0, 40),
+                   collections: collections }
     var wantTags = st.tags || []
     var items = base.filter(function(p) {
+        if (st.collection && !inCollection(p, st.collection)) return false
         if (st.category && p.category !== st.category) return false
         for (var i = 0; i < wantTags.length; i++) if (p.tags.indexOf(wantTags[i]) < 0) return false
         return true

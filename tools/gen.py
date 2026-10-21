@@ -46,11 +46,12 @@ SWATCHES = ["#141414", "#1d1510", "#1a1b26", "#282a36", "#2e3440", "#2d353b", "#
             "#e0e0e0", "#eadbc8", "#ffffff", "#c0caf5", "#d8dee9", "#dcd7ba", "#f8f8f2", "#e0def4",
             "#d4a35a", "#c8925a", "#7aa2f7", "#cba6f7", "#a7c080", "#88c0d0", "#fabd2f", "#ff6a1f"]
 
-SORTS = ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "rated", "az"]
+SORTS = ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "copies", "rank", "rated", "az", "kind"]
 SORT_LABELS = {"newest": "Newly uploaded", "listed": "As listed",
                "updated": "Recently upgraded", "fresh": "New or upgraded",
                "hearts": "Most hearts", "stars": "Most stars", "views": "Most viewed",
-               "rated": "Best install rate", "az": "A to Z"}
+               "copies": "Most copied", "rank": "Top ranked",
+               "rated": "Best install rate", "az": "A to Z", "kind": "Plugin type"}
 
 SPEC = [
   ("Colors", sec("Scheme", [
@@ -113,14 +114,15 @@ SPEC = [
       {"community": "Community", "builtin": "Built-in", "all": "Everything"},
       "Which plugins you see first when the window opens."),
     E("defaultSort", "Sort by", "newest", SORTS, SORT_LABELS,
-      "Newly uploaded = first listed. As listed = the order the catalog feed returns them in (matches the website's default view). Recently upgraded = latest update. New or upgraded = whichever is most recent.", control="chips"),
+      "Newly uploaded = first listed. As listed = the order the catalog feed returns them in. Recently upgraded = latest new version or push. "
+      "Top ranked adds up the places by hearts, copies, views and stars, like the website.", control="chips"),
     E("recencyScope", "Recency filter looks at", "either", ["either", "added", "updated"],
       {"either": "Uploaded or upgraded", "added": "Uploaded", "updated": "Upgraded"},
       "Used together with the time window below.", when=[{"key": "recencyDays", "is": ["7", "30", "90", "365"]}]),
     E("recencyDays", "Only show from the last", "any", ["any", "7", "30", "90", "365"],
       {"any": "Any time", "7": "Week", "30": "Month", "90": "3 months", "365": "Year"},
       "Hide plugins that have not been uploaded or upgraded recently."),
-    B("verifiedOnly", "Verified only", False, "Hide plugins without the Verified badge."),
+    B("verifiedOnly", "Verified only", False, "Start on Verified in the Verification filter, which hides plugins without the badge."),
     B("hideInstalled", "Hide installed", False, "Keep plugins you already have out of Browse."),
     B("showCounts", "Show counts", True, "Numbers next to categories and tags."),
     I("newBadgeDays", "Call it New for", 14, 1, 60, 1, "Days a plugin keeps its New badge after upload."),
