@@ -35,6 +35,7 @@ Thanks to [@TowhidMolla-Dev](https://github.com/TowhidMolla-Dev) for the first c
 
 - The changelog in the details loads again.
 - The window opens at the new default size everywhere, not only in the settings.
+- Omarchy's own plugins listed in the catalog show under Built-in only, and never offer an install command.
 
 ## 1.5.0
 
