@@ -57,7 +57,13 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: ui.px(12)
             Txt { ui: root.ui; text: "made with "; opacity: 0.75; font.pixelSize: ui.fs(12) }
-            Txt { ui: root.ui; text: "♥"; color: ui.accent; font.pixelSize: ui.fs(13); anchors.verticalCenter: parent.verticalCenter }
+            Text {   // the system font: the window's font draws the heart as an outline
+                textFormat: Text.PlainText
+                text: "\u2665"
+                color: ui.accent
+                font.pixelSize: ui.fs(13)
+                anchors.verticalCenter: parent.verticalCenter
+            }
             Txt { ui: root.ui; text: " by qempexe"; opacity: 0.75; font.pixelSize: ui.fs(12) }
         }
 
