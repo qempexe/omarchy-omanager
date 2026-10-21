@@ -70,8 +70,8 @@ for name in ("qml/panel/ManagerView.qml", "qml/panel/SettingRow.qml"):
 
 # the version being shipped has a changelog entry
 version = json.loads(read("manifest.json"))["version"]
-if ("### " + version) not in read("README.md"):
-    failures.append("README.md: no changelog entry for %s" % version)
+if ("## " + version + "\n") not in read("CHANGELOG.md"):
+    failures.append("CHANGELOG.md: no entry for %s" % version)
 
 if failures:
     print("FAIL")
