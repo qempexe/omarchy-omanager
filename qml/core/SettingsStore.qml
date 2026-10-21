@@ -100,7 +100,7 @@ Item {
 
     Process {
         id: mkdir
-        command: ["mkdir", "-p", root.stateDir]
+        command: ["mkdir", "-p", "-m", "700", "--", root.stateDir]
         onExited: {
             root.dirReady = true
             if (!root.loaded) file.reload()
