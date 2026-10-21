@@ -51,7 +51,7 @@ The same filters as [plugins.omarchy.org](https://plugins.omarchy.org), and a fe
 
 ## Installed plugins
 
-![Installed](screenshots/installed.png)
+![Installed](screenshots/your-plugins.png)
 
 Installed plugins get an on/off switch, and an *Update* button when the catalog has a newer version. **Health** flags the ones that need a look: in a folder named differently from their id, not a git checkout, missing from the catalog, or without a manifest. Updates and removals always use the plugin's real folder.
 
