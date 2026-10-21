@@ -290,9 +290,11 @@ function normalizePlugin(raw, fallbackId) {
         accent: validHex(pick(raw, ["accent"]), ""),
         addedAt: added,
         updatedAt: updated,
-        builtin: false,
+        // the catalog lists Omarchy's own plugins too; they ship with Omarchy
+        builtin: pick(raw, ["builtIn"]) === true || str(pick(raw, ["sourceType"])) === "builtin",
         local: false
     }
+    if (p.builtin) { p.author = p.author || "Omarchy"; p.installable = false; p.verified = true }
     p.fresh = Math.max(added, updated)
     p.kindKey = kindKey(p.kind)
     p.rate = installRate(p, copies, views)
@@ -542,18 +544,21 @@ function pool(catalog, installedList, installedMap, source) {
     if (_poolCache.catalog === catalog && _poolCache.installed === installedList && _poolCache.source === source)
         return _poolCache.out
     var out = []
+    var inCatalog = {}
+    for (var i = 0; i < catalog.length; i++) inCatalog[catalog[i].id] = true
     if (source === "community" || source === "all") {
-        out = out.concat(catalog)
-        var inCatalog = {}
-        for (var i = 0; i < catalog.length; i++) inCatalog[catalog[i].id] = true
+        for (var c = 0; c < catalog.length; c++) if (!catalog[c].builtin) out.push(catalog[c])
         for (var j = 0; j < installedList.length; j++) {
             var r = installedList[j]
             if (!r.builtin && !inCatalog[r.id]) out.push(pseudoRecord(r, "Local", "You"))
         }
     }
     if (source === "builtin" || source === "all") {
+        // the catalog's own entries (description, type, category), then any the catalog lacks
+        for (var b = 0; b < catalog.length; b++) if (catalog[b].builtin) out.push(catalog[b])
         for (var k = 0; k < installedList.length; k++)
-            if (installedList[k].builtin) out.push(pseudoRecord(installedList[k], "Built-in", "Omarchy"))
+            if (installedList[k].builtin && !inCatalog[installedList[k].id])
+                out.push(pseudoRecord(installedList[k], "Built-in", "Omarchy"))
     }
     _poolCache = { catalog: catalog, installed: installedList, source: source, out: out }
     return out
@@ -793,7 +798,7 @@ function actionArgs(kind, id, repo, cfg) {
 }
 
 function installCommand(p) {
-    return p.repo ? "omarchy plugin add " + p.repo + " --enable" : ""
+    return p.repo && !p.builtin ? "omarchy plugin add " + p.repo + " --enable" : ""
 }
 
 // `omarchy plugin update` and `remove` resolve "$PLUGINS_DIR/<name>", so the name

@@ -41,7 +41,7 @@ Item {
             list.push({ label: "Open folder", run: act(function() { ui.service.openPluginDir(st.dir) }) })
         if (p.repo !== "")
             list.push({ label: "Open repository", run: act(function() { ui.service.openUrl(p.repo) }) })
-        if (p.repo !== "" && !st.installed)
+        if (p.repo !== "" && !st.installed && !p.builtin)
             list.push({ label: "Copy install command", run: act(function() { ui.service.copyText(Model.installCommand(p)) }) })
         list.push({ label: "Show details", run: act(function() { ui.openDetail(p) }) })
         if (st.installed && !p.builtin)

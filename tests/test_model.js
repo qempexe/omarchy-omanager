@@ -304,6 +304,18 @@ const ids = r => r.items.map(p => p.id);
   assert.strictEqual(cat[0].rate, -1, "under 20 views at load: not rated");
 })();
 
+(function builtins() {
+  const cat = M.normalizeCatalog({ plugins: [
+    { id: "omarchy.clock", name: "Clock", sourceType: "builtin", builtIn: true, kind: "Bar widget", category: "Bar widgets" },
+    { id: "a.b", name: "Thing", author: "x", repo: "https://github.com/a/b", verificationStatus: "verified" }
+  ] });
+  assert.ok(cat[0].builtin && !cat[0].installable, "the catalog's built-ins are built-in, never installed");
+  const inst = M.normalizeInstalled([{ id: "omarchy.clock", enabled: true }, { id: "omarchy.extra", enabled: true }]);
+  const ids = (src) => M.query(cat, inst.list, inst.map, { query: "", source: src, sort: "az", days: 0, status: "any" }).items.map(p => p.id);
+  assert.deepStrictEqual(ids("community"), ["a.b"], "built-ins stay out of Community");
+  assert.deepStrictEqual(ids("builtin").sort(), ["omarchy.clock", "omarchy.extra"], "catalog built-ins, then installed ones it lacks");
+})();
+
 (function commands() {
   const a = M.actionArgs("install", "x", "https://github.com/o/r", { enableAfterInstall: true });
   assert.deepStrictEqual(a.argv, ["omarchy", "plugin", "add", "https://github.com/o/r.git", "--enable", "--yes"]);
