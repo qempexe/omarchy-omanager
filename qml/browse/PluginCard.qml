@@ -28,8 +28,8 @@ Item {
     readonly property color tone: ui.tone(p.category)
     readonly property bool isNew: p.addedAt > 0 && (ui.now - p.addedAt) < ui.newBadgeDays * 86400000
     readonly property bool showShot: !list && !compact && ui.showPreviews
-    readonly property bool gridShotShown: showShot && p.preview !== "" && gridImg.status !== Image.Error
-    readonly property bool listShotShown: list && ui.showPreviews && p.preview !== "" && listImg.status !== Image.Error
+    readonly property bool gridShotShown: showShot && gridImg.status === Image.Ready
+    readonly property bool listShotShown: list && ui.showPreviews && listImg.status === Image.Ready
     readonly property string action: st.update ? "update" : (!st.installed && !p.builtin && p.repo !== "" && p.installable ? "install" : "")
     readonly property bool saved: ui.service && ui.service.bookmarks[p.id] === true
     readonly property string stats: (p.builtin || p.local) ? "" : [
@@ -90,7 +90,7 @@ Item {
                 Image {
                     id: gridImg
                     anchors.fill: parent
-                    source: root.showShot ? p.preview : ""
+                    source: root.showShot ? ui.service.imageFor(p.preview, ui.service.imageTick) : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
@@ -270,7 +270,7 @@ Item {
                 Image {
                     id: listImg
                     anchors.fill: parent
-                    source: (root.list && ui.showPreviews) ? p.preview : ""
+                    source: (root.list && ui.showPreviews) ? ui.service.imageFor(p.preview, ui.service.imageTick) : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true

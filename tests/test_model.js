@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, imageBatchArgs, imageReport, imageInventory, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -235,6 +235,23 @@ const ids = r => r.items.map(p => p.id);
   assert.ok(f.includes("core.hooksPath=/dev/null"));
   assert.strictEqual(M.gitFetchArgs("/p/x", "ext::sh -c id"), null, "only a plain repository address is fetched");
   assert.strictEqual(M.gitFetchArgs("/p/x", ""), null, "no address, no fetch");
+})();
+
+(function images() {
+  const n = M.imageName("https://plugins.omarchy.org/assets/img/plugins/a-card.webp");
+  assert.ok(/^[0-9a-f]{16}\.webp$/.test(n), "a plain hashed name: " + n);
+  assert.strictEqual(M.imageName("https://plugins.omarchy.org/x"), M.imageName("https://plugins.omarchy.org/x"), "stable");
+  const argv = M.imageBatchArgs([
+    { url: "https://plugins.omarchy.org/a.webp", name: n },
+    { url: "https://evil.example/a.png", name: "0000000000000000.png" },
+    { url: "https://plugins.omarchy.org/b.webp", name: "../../etc/passwd" }
+  ], "/c");
+  assert.strictEqual(argv.filter(a => a === "--url").length, 1, "only allowed hosts and plain names are fetched");
+  assert.ok(argv.includes("--max-filesize") && argv.includes("=https"));
+  const ok = M.imageReport("0 /c/" + n + "\n22 /c/0000000000000000.png\n0 /etc/" + n + "\n", "/c");
+  assert.deepStrictEqual(Object.keys(ok), [n], "only complete files in the cache folder count");
+  const inv = M.imageInventory("5 " + n + "\n9 1111111111111111.png\n1 notes.txt\n");
+  assert.deepStrictEqual(Object.keys(inv.keep).sort(), ["1111111111111111.png", n].sort());
 })();
 
 (function commands() {

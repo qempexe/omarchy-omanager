@@ -83,6 +83,7 @@ Item {
         if (!started) {
             started = true
             mkdir.running = true
+            imageMkdir.start(["mkdir", "-p", "-m", "700", "--", imageDir])
             refreshInstalled()
         } else if (url !== "" && url !== lastUrl) {
             refresh(true)
@@ -263,6 +264,104 @@ Item {
         repeat: true
         running: root.started
         onTriggered: if (root.stale()) root.refresh(false)
+    }
+
+    // ---- preview images (local cache) --------------------------------------------
+    // A card asks for its preview through imageFor(url): it gets the cached file once
+    // it is there, and "" meanwhile while the image is fetched in the background,
+    // a small batch at a time. imageTick changes whenever new files arrive.
+    readonly property string imageDir: (Quickshell.env("XDG_CACHE_HOME")
+        || Quickshell.env("HOME") + "/.cache") + "/omarchy-omanager/previews"
+    property var imageFiles: ({})               // file name -> true, the complete ones
+    property int imageTick: 0
+    property bool imagesScanned: false
+    property var imageWanted: ({})              // file name -> url, waiting for a batch
+    property var imageBatch: []                 // [{ name, url }] being downloaded
+    property var imageFailed: ({})              // file name -> true, not retried this session
+
+    function imageFor(url, tick) {
+        if (url === "" || url === undefined || url === null) return ""
+        var name = Model.imageName(url)
+        if (imageFiles[name]) return "file://" + imageDir + "/" + name
+        if (imagesScanned && !imageFailed[name] && imageWanted[name] === undefined) {
+            imageWanted[name] = String(url)
+            imageQueue.restart()
+        }
+        return ""
+    }
+
+    // Still on its way: waiting for a batch, or in the one being downloaded.
+    function imageBusy(url, tick) {
+        if (!url) return false
+        var name = Model.imageName(url)
+        if (imageFiles[name] || imageFailed[name]) return false
+        if (imageWanted[name] !== undefined) return true
+        for (var i = 0; i < imageBatch.length; i++) if (imageBatch[i].name === name) return true
+        return false
+    }
+
+    function nextImageBatch() {
+        if (imageGet.running || imageMkdir.running) return
+        var items = []
+        for (var name in imageWanted) {
+            if (items.length >= Model.IMAGE_BATCH) break
+            items.push({ name: name, url: imageWanted[name] })
+        }
+        if (items.length === 0) return
+        for (var i = 0; i < items.length; i++) delete imageWanted[items[i].name]
+        imageBatch = items
+        imageGet.start(Model.imageBatchArgs(items, imageDir))
+    }
+
+    Timer { id: imageQueue; interval: 150; onTriggered: root.nextImageBatch() }
+
+    Run {
+        id: imageGet
+        seconds: 90
+        maxOut: 65536
+        onDone: function(code, out, err) {
+            var ok = Model.imageReport(out, root.imageDir)
+            var files = {}
+            for (var k in root.imageFiles) files[k] = true
+            var leftovers = []
+            for (var i = 0; i < root.imageBatch.length; i++) {
+                var name = root.imageBatch[i].name
+                if (ok[name]) files[name] = true
+                else { root.imageFailed[name] = true; leftovers.push(root.imageDir + "/" + name) }
+            }
+            root.imageBatch = []
+            root.imageFiles = files
+            root.imageTick++
+            // whatever did not arrive whole is removed, so a half file is never shown
+            if (leftovers.length > 0) imageClean.start(["rm", "-f", "--"].concat(leftovers))
+            root.nextImageBatch()
+        }
+    }
+
+    Run { id: imageClean; seconds: 20; maxOut: 4096 }
+
+    // At start: make the folder, then see what is already cached, keeping the
+    // newest ones and removing the oldest past the limit.
+    Run {
+        id: imageMkdir
+        seconds: 10
+        maxOut: 4096
+        onDone: imageScan.start(["find", root.imageDir, "-mindepth", "1", "-maxdepth", "1",
+                                 "-type", "f", "-printf", "%T@ %f\n"])
+    }
+
+    Run {
+        id: imageScan
+        seconds: 20
+        maxOut: 1048576
+        onDone: function(code, out, err) {
+            var inv = Model.imageInventory(out)
+            root.imageFiles = inv.keep
+            root.imagesScanned = true
+            root.imageTick++
+            if (inv.drop.length > 0)
+                imageClean.start(["rm", "-f", "--"].concat(inv.drop.slice(0, 2000).map(function(n) { return root.imageDir + "/" + n })))
+        }
     }
 
     // ---- installed plugins ----------------------------------------------------

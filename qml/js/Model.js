@@ -128,6 +128,76 @@ function safeCatalogUrl(u) {
     return parseUrl(s) && s.length <= 2048 && !/\s/.test(s) ? s : ""
 }
 
+// ---- preview images -------------------------------------------------------
+// Previews are downloaded into a local cache folder and shown from there, so an
+// image is fetched once (https, size and time limits) and never streamed straight
+// from the network into the window.
+var IMAGE_MAX = 4 * 1048576
+var IMAGE_BATCH = 12
+var IMAGE_KEEP = 1200
+
+// A stable file name for an image address: two 32-bit hashes and the extension.
+function imageName(url) {
+    var s = str(url)
+    var a = 0x811c9dc5, b = 5381
+    for (var i = 0; i < s.length; i++) {
+        var c = s.charCodeAt(i)
+        a = Math.imul(a ^ c, 16777619) >>> 0
+        b = (Math.imul(b, 33) + c) >>> 0
+    }
+    var m = /\.(webp|png|jpe?g|avif|gif)(?:$|[?#])/i.exec(s)
+    var hex = function(n) { return ("00000000" + n.toString(16)).slice(-8) }
+    return hex(a) + hex(b) + "." + (m ? m[1].toLowerCase().replace("jpeg", "jpg") : "img")
+}
+
+function isImageName(name) {
+    return /^[0-9a-f]{16}\.(webp|png|jpg|avif|gif|img)$/.test(str(name))
+}
+
+// One curl for a batch of images. Each line it prints is "<exit code> <file>", so
+// the files that arrived whole are known; the rest are deleted afterwards.
+function imageBatchArgs(items, dir) {
+    var argv = curlArgs(IMAGE_MAX, 60).concat(["--parallel", "--parallel-max", "4",
+                "--write-out", "%{exitcode} %{filename_effective}\\n"])
+    for (var i = 0; i < items.length; i++) {
+        var url = safeImageUrl(items[i].url)
+        if (!url || !isImageName(items[i].name)) continue
+        argv.push("-o", dir + "/" + items[i].name, "--url", url)
+    }
+    return argv
+}
+
+// The names curl reported as complete (exit code 0).
+function imageReport(text, dir) {
+    var ok = {}
+    var lines = str(text).split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var m = /^0 (.+)$/.exec(lines[i].trim())
+        if (!m || m[1].indexOf(dir + "/") !== 0) continue
+        var name = m[1].slice(dir.length + 1)
+        if (isImageName(name)) ok[name] = true
+    }
+    return ok
+}
+
+// `find -printf '%T@ %f\n'` of the cache folder -> { keep: {name: true}, drop: [names] },
+// the newest IMAGE_KEEP kept.
+function imageInventory(text) {
+    var rows = []
+    var lines = str(text).split("\n")
+    for (var i = 0; i < lines.length; i++) {
+        var m = /^([0-9.]+) (\S+)$/.exec(lines[i].trim())
+        if (m && isImageName(m[2])) rows.push({ t: Number(m[1]), name: m[2] })
+    }
+    rows.sort(function(x, y) { return y.t - x.t })
+    var keep = {}, drop = []
+    for (var j = 0; j < rows.length; j++) {
+        if (j < IMAGE_KEEP) keep[rows[j].name] = true
+        else drop.push(rows[j].name)
+    }
+    return { keep: keep, drop: drop }
+}
+
 // ---- catalog --------------------------------------------------------------
 function isVerified(raw) {
     var flag = pick(raw, ["verified", "isVerified"])

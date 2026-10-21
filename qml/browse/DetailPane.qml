@@ -112,7 +112,7 @@ Rectangle {
                 Image {
                     id: bigImg
                     anchors.fill: parent
-                    source: (ui.cfgSafe.showPreviews && root.p) ? root.p.previewFull : ""
+                    source: (ui.cfgSafe.showPreviews && root.p) ? ui.service.imageFor(root.p.previewFull, ui.service.imageTick) : ""
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
                     cache: true
@@ -124,9 +124,10 @@ Rectangle {
                     ui: root.ui
                     anchors.centerIn: parent
                     visible: bigImg.status !== Image.Ready
-                    text: bigImg.status === Image.Loading ? "Loading preview\u2026"
+                    text: (bigImg.status === Image.Loading || (root.p && ui.service.imageBusy(root.p.previewFull, ui.service.imageTick)))
+                          ? "Loading preview\u2026"
                           : (root.p ? root.p.name.charAt(0).toUpperCase() : "")
-                    font.pixelSize: bigImg.status === Image.Loading ? ui.fs(11) : ui.fs(54)
+                    font.pixelSize: text.length > 1 ? ui.fs(11) : ui.fs(54)
                     font.weight: Font.Light
                     opacity: 0.4
                 }
