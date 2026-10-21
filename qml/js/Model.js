@@ -109,9 +109,16 @@ function webUrl(u) {
     return s ? s.replace(/\.git$/, "") : ""
 }
 
+// Links the window opens in the browser: https on a known site only (the code
+// hosts plugins live on, and the plugin website), with no user part and nothing
+// unusual in them. The About page link is one of these too.
+var LINK_HOSTS = REPO_HOSTS.concat(["plugins.omarchy.org", "omarchy.org"])
+
 function safeWebUrl(u) {
-    var p = parseUrl(u)
-    return p ? str(u).trim() : ""
+    var s = str(u).trim()
+    if (s.length > 2048 || /[\s\\<>"'`]/.test(s) || /[\x00-\x1f\x7f]/.test(s)) return ""
+    var p = parseUrl(s)
+    return p && LINK_HOSTS.indexOf(p.host) >= 0 ? s : ""
 }
 
 function safeImageUrl(u) {

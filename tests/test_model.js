@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, imageBatchArgs, imageReport, imageInventory, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, imageBatchArgs, imageReport, imageInventory, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -252,6 +252,17 @@ const ids = r => r.items.map(p => p.id);
   assert.deepStrictEqual(Object.keys(ok), [n], "only complete files in the cache folder count");
   const inv = M.imageInventory("5 " + n + "\n9 1111111111111111.png\n1 notes.txt\n");
   assert.deepStrictEqual(Object.keys(inv.keep).sort(), ["1111111111111111.png", n].sort());
+})();
+
+(function links() {
+  assert.strictEqual(M.safeWebUrl("https://github.com/o/r"), "https://github.com/o/r");
+  assert.strictEqual(M.safeWebUrl("https://github.com/qempexe?tab=repositories&q=omarchy"), "https://github.com/qempexe?tab=repositories&q=omarchy");
+  assert.strictEqual(M.safeWebUrl("https://plugins.omarchy.org/#author=qempexe"), "https://plugins.omarchy.org/#author=qempexe");
+  assert.strictEqual(M.safeWebUrl("https://evil.example/"), "", "unknown site");
+  assert.strictEqual(M.safeWebUrl("https://evil.example\\@github.com/"), "", "backslash trick");
+  assert.strictEqual(M.safeWebUrl("https://user@github.com/"), "", "user part");
+  assert.strictEqual(M.safeWebUrl("http://github.com/"), "", "https only");
+  assert.strictEqual(M.safeWebUrl("file:///etc/passwd"), "");
 })();
 
 (function commands() {

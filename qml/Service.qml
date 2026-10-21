@@ -561,7 +561,7 @@ Item {
 
     // ---- clipboard / links ----------------------------------------------------------
     function copyText(text) {
-        copier.command = ["wl-copy", String(text)]
+        copier.command = ["wl-copy", "--", String(text).slice(0, 2048)]
         copier.running = true
         note("Copied to clipboard")
     }
