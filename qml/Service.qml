@@ -523,7 +523,7 @@ Item {
     }
 
     function loadHistory(id, dir, incoming) {
-        var d = str(dir)
+        var d = Model.str(dir)
         if (!/^[A-Za-z0-9._-]{1,128}$/.test(d)) return
         var cur = history[id]
         if (cur && cur.state === "loading") return
