@@ -181,8 +181,8 @@ Item {
 
         visible: false
         color: "transparent"
-        implicitWidth: (root.ui ? root.ui.cfgSafe.windowWidth : 460) + root.padLeft + root.padRight
-        implicitHeight: Math.min(root.maxHeight, root.ui ? root.ui.cfgSafe.windowHeight : 620) + root.padTop + root.padBottom
+        implicitWidth: (root.ui ? root.ui.cfgSafe.windowWidth : 560) + root.padLeft + root.padRight
+        implicitHeight: Math.min(root.maxHeight, root.ui ? root.ui.cfgSafe.windowHeight : 680) + root.padTop + root.padBottom
 
         anchor.item: root.useRect ? null : root.anchorItem
         anchor.window: root.useRect ? root.anchorWin : null

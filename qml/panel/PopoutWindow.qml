@@ -14,8 +14,8 @@ FloatingWindow {
     title: "Omanager"
     visible: false
     color: "transparent"
-    implicitWidth: ui ? ui.cfgSafe.windowWidth : 460
-    implicitHeight: ui ? ui.cfgSafe.windowHeight : 620
+    implicitWidth: ui ? ui.cfgSafe.windowWidth : 560
+    implicitHeight: ui ? ui.cfgSafe.windowHeight : 680
 
     Loader {
         anchors.fill: parent

@@ -27,7 +27,7 @@ Item {
     readonly property var cfgSafe: cfg ? cfg : ({
         colorMode: "theme", accentColor: "#ff6a1f", cardStyle: "soft", density: "comfortable",
         cornerRadius: 4, fontScale: 100, surfaceTint: 0, showPreviews: true, frame: false, openAs: "panel",
-        windowWidth: 460, windowHeight: 620, viewMode: "list", columns: "auto", filtersPanel: "left",
+        windowWidth: 560, windowHeight: 680, viewMode: "list", columns: "auto", filtersPanel: "left",
         defaultSource: "community", defaultSort: "newest", recencyScope: "either", recencyDays: "any",
         verifiedOnly: false, hideInstalled: false, showCounts: true, newBadgeDays: 14,
         confirmInstall: true, confirmRemove: true, allowUnverified: true, showSecurityNote: true
