@@ -2,12 +2,15 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "js/Model.js" as Model
+import "core"
 
 // Shared brain of Omanager (one instance for the whole shell).
 //   * downloads and caches the plugin catalog (curl, https only)
 //   * reads installed plugins from `omarchy plugin list --json`
 //   * runs install / update / enable / disable / remove, one at a time,
 //     as argument arrays (never through a shell)
+// Every helper runs through Run (core/Run.qml): a time limit, and a size limit on
+// what it prints, so a stuck or chatty command can never hang or flood the shell.
 //   * remembers bookmarks and the last visit
 Item {
     id: root
@@ -162,13 +165,11 @@ Item {
         catalogState = "loading"
         catalogError = ""
         gotData = false
-        var args = ["curl", "-fsSL", "--compressed", "--max-time", "60", "--proto", "=https",
-                    "-A", "omarchy-omanager"]
+        var args = Model.curlArgs(Model.CATALOG_MAX, 90)
         // Conditional GET: when we already hold a copy, an unchanged catalog costs one 304.
         if (haveCache && catalog.length > 0) args = args.concat(["-z", cachePath])
-        args.push(url)
-        fetcher.command = args
-        fetcher.running = true
+        args.push("--", url)
+        if (!fetcher.start(args)) catalogState = "idle"
     }
 
     function failFetch(msg) {
@@ -204,20 +205,16 @@ Item {
         return true
     }
 
-    Process {
+    Run {
         id: fetcher
-        running: false
-        stdout: StdioCollector {
-            id: fetchOut
-            onStreamFinished: {
-                if (root.catalogState !== "loading") return
-                if (fetchOut.text && fetchOut.text.length > 2)
-                    root.takeCatalog(fetchOut.text, false)
-            }
-        }
-        onExited: function(code) {
+        seconds: 100
+        maxOut: Model.CATALOG_MAX
+        onDone: function(code, out, err) {
             if (root.catalogState !== "loading") return
-            if (code !== 0) root.failFetch("Download failed (curl exit " + code + "). Are you online?")
+            if (code === fetcher.tooBig) { root.failFetch("The catalog is larger than expected, so it was not loaded"); return }
+            if (code === fetcher.timedOut) { root.failFetch("The download took too long. Are you online?"); return }
+            if (code !== 0) { root.failFetch("Download failed (curl exit " + code + "). Are you online?"); return }
+            if (out.length > 2) root.takeCatalog(out, false)
             else notModified.restart()      // exit 0 and no body: the 304 case
         }
     }
@@ -238,25 +235,21 @@ Item {
 
     // ---- engagement stats (hearts / views / copies live in a separate API) ----
     function fetchStats() {
-        if (statsFetcher.running) return
-        statsFetcher.command = ["curl", "-fsSL", "--compressed", "--max-time", "30", "--proto", "=https",
-                                "-A", "omarchy-omanager", Model.STATS_URL]
-        statsFetcher.running = true
+        statsFetcher.start(Model.curlArgs(Model.STATS_MAX, 30).concat(["--", Model.STATS_URL]))
     }
 
-    Process {
+    Run {
         id: statsFetcher
-        running: false
-        stdout: StdioCollector {
-            id: statsOut
-            onStreamFinished: {
-                try {
-                    var m = Model.normalizeStats(JSON.parse(statsOut.text))
-                    if (Object.keys(m).length === 0) return
-                    root.stats = m
-                    if (Model.applyStats(root.catalog, m) > 0) root.catalog = root.catalog.slice()
-                } catch (e) { /* decoration only: ignore */ }
-            }
+        seconds: 40
+        maxOut: Model.STATS_MAX
+        onDone: function(code, out, err) {
+            if (code !== 0) return              // decoration only: keep what we have
+            try {
+                var m = Model.normalizeStats(JSON.parse(out))
+                if (Object.keys(m).length === 0) return
+                root.stats = m
+                if (Model.applyStats(root.catalog, m) > 0) root.catalog = root.catalog.slice()
+            } catch (e) { }
         }
     }
 
@@ -269,19 +262,16 @@ Item {
 
     // ---- installed plugins ----------------------------------------------------
     function refreshInstalled() {
-        if (lister.running) return
-        lister.running = true
+        lister.start(["omarchy", "plugin", "list", "--json"])
     }
 
-    Process {
+    Run {
         id: lister
-        command: ["omarchy", "plugin", "list", "--json"]
-        running: false
-        stdout: StdioCollector {
-            id: listOut
-            onStreamFinished: {
+        seconds: 20
+        maxOut: 2 * 1048576
+        onDone: function(code, out, err) {
                 var parsed = null
-                try { parsed = JSON.parse(listOut.text) } catch (e) { parsed = null }
+                try { parsed = code === 0 ? JSON.parse(out) : null } catch (e) { parsed = null }
                 var r = parsed ? Model.normalizeInstalled(parsed) : null
                 if (!r || r.list.length === 0) {
                     // `omarchy plugin list` asks the shell over IPC, and the
@@ -299,10 +289,9 @@ Item {
                 root.installedAttempts = 0
                 root.installedBase = r
                 root.assembleInstalled()
-                versionScanner.running = true
-                birthScanner.running = true
-                gitScanner.running = true
-            }
+                versionScanner.start(Model.scanVersionsArgs(root.pluginsDir))
+                birthScanner.start(Model.scanBirthsArgs(root.pluginsDir))
+                gitScanner.start(Model.scanGitArgs(root.pluginsDir))
         }
     }
 
@@ -310,7 +299,7 @@ Item {
         id: installedRetry
         interval: 1000
         repeat: false
-        onTriggered: lister.running = true
+        onTriggered: root.refreshInstalled()
     }
 
     // Third-party plugins live in ~/.config/omarchy/plugins/<dir>/manifest.json.
@@ -319,57 +308,40 @@ Item {
     // Hidden directories are clone staging areas and backups, never plugins. One
     // jq per manifest so a half-written file only costs its own line, and the
     // whole command stays an argument array like every other one here.
-    Process {
+    Run {
         id: versionScanner
-        running: false
-        command: ["find", root.pluginsDir, "-mindepth", "2", "-maxdepth", "2",
-                  "-name", "manifest.json", "-not", "-path", root.pluginsDir + "/.*",
-                  "-exec", "jq", "--compact-output",
-                  '[(.id // ""), (.version // ""), (input_filename), (.omarchy.clonedFrom // "")]', "{}", ";"]
-        stdout: StdioCollector {
-            id: versionOut
-            onStreamFinished: {
-                var text = versionOut.text || ""
-                // Nothing read: keep the versions already known rather than
-                // clearing every update the moment a scan comes back empty.
-                if (text.trim() !== "") root.installedScan = Model.normalizeScan(text)
-                else root.warnNoVersions()
-            }
+        seconds: 30
+        maxOut: 2 * 1048576
+        onDone: function(code, out, err) {
+            // Nothing read: keep the versions already known rather than
+            // clearing every update the moment a scan comes back empty.
+            if (out.trim() !== "") root.installedScan = Model.normalizeScan(out)
+            else root.warnNoVersions()
+            root.assembleInstalled()
         }
-        onExited: root.assembleInstalled()
     }
 
     // The install time is not in the manifest, so it comes from the directory
     // itself: `stat` prints birth time (0 when the filesystem does not record
     // one) then mtime. It is what makes "Newly installed" possible.
-    Process {
+    Run {
         id: birthScanner
-        running: false
-        command: ["find", root.pluginsDir, "-mindepth", "1", "-maxdepth", "1",
-                  "-type", "d", "-not", "-name", ".*",
-                  "-exec", "stat", "--format=%W %Y %n", "{}", ";"]
-        stdout: StdioCollector {
-            id: birthOut
-            onStreamFinished: {
-                var text = birthOut.text || ""
-                if (text.trim() !== "") root.installedBirths = Model.normalizeBirths(text)
-            }
+        seconds: 20
+        maxOut: 524288
+        onDone: function(code, out, err) {
+            if (out.trim() !== "") root.installedBirths = Model.normalizeBirths(out)
+            root.assembleInstalled()
         }
-        onExited: root.assembleInstalled()
     }
 
     // Which plugin directories are git checkouts. Only those can be updated by
     // `omarchy plugin update`; the rest are surfaced under Health. `%h` prints
     // the directory that holds each .git.
-    Process {
+    Run {
         id: gitScanner
-        running: false
-        command: ["find", root.pluginsDir, "-mindepth", "2", "-maxdepth", "2",
-                  "-name", ".git", "-type", "d", "-printf", "%h\n"]
-        stdout: StdioCollector {
-            id: gitOut
-            onStreamFinished: root.gitDirs = Model.normalizeDirSet(gitOut.text || "")
-        }
+        seconds: 20
+        maxOut: 262144
+        onDone: function(code, out, err) { if (code === 0) root.gitDirs = Model.normalizeDirSet(out) }
     }
 
     // ---- actions ----------------------------------------------------------------
@@ -399,8 +371,7 @@ Item {
         if (current !== null || queue.length === 0) return
         current = queue[0]
         queue = queue.slice(1)
-        actor.command = current.argv
-        actor.running = true
+        actor.start(current.argv)
     }
 
     function finishCurrent(ok, text) {
@@ -414,22 +385,23 @@ Item {
         drain()
     }
 
-    Process {
+    // An install clones a repository, so it gets a generous time limit. What it
+    // prints is only used for the last line of an error.
+    Run {
         id: actor
-        running: false
-        stdout: StdioCollector { id: actorOut }
-        stderr: StdioCollector { id: actorErr }
-        onExited: function(code) {
+        seconds: 600
+        maxOut: 262144
+        onDone: function(code, out, err) {
             var c = root.current
             if (!c) return
-            var out = (actorErr.text || actorOut.text || "").trim().split("\n").slice(-2).join(" ")
             if (code !== 0 && c.fallback && !c.triedFallback) {
                 c.triedFallback = true
-                actor.command = c.fallback
-                actor.running = true
+                Qt.callLater(function() { actor.start(c.fallback) })
                 return
             }
-            root.finishCurrent(code === 0, code === 0 ? "" : out)
+            var why = code === actor.timedOut ? "took too long and was stopped"
+                    : (err || out || "").trim().split("\n").slice(-2).join(" ")
+            root.finishCurrent(code === 0, code === 0 ? "" : why.slice(0, 300))
         }
     }
 
@@ -532,24 +504,20 @@ Item {
         histDir = d
         histIncoming = incoming === true
         setHistory(id, { state: "loading", incoming: histIncoming, lines: [], error: "" })
-        if (histIncoming) {
-            fetchProc.command = Model.gitFetchArgs(pluginsDir + "/" + d)
-            fetchProc.running = true
-        } else {
-            startHistoryLog()
-        }
+        if (histIncoming) fetchProc.start(Model.gitFetchArgs(pluginsDir + "/" + d))
+        else startHistoryLog()
     }
 
     function startHistoryLog() {
-        histProc.command = Model.gitLogArgs(pluginsDir + "/" + histDir, histIncoming)
-        histProc.running = true
+        histProc.start(Model.gitLogArgs(pluginsDir + "/" + histDir, histIncoming))
     }
 
-    Process {
+    Run {
         id: fetchProc
-        running: false
-        stderr: StdioCollector { id: fetchErr }
-        onExited: function(code) {
+        seconds: 60
+        maxOut: 65536
+        environment: ({ GIT_TERMINAL_PROMPT: "0" })
+        onDone: function(code, out, err) {
             if (code !== 0) {
                 root.setHistory(root.histId, { state: "error", incoming: true, lines: [],
                     error: "Could not reach the remote to fetch changes." })
@@ -559,19 +527,18 @@ Item {
         }
     }
 
-    Process {
+    Run {
         id: histProc
-        running: false
-        stdout: StdioCollector { id: histOut }
-        stderr: StdioCollector { id: histErr }
-        onExited: function(code) {
+        seconds: 20
+        maxOut: 65536
+        onDone: function(code, out, err) {
             if (code !== 0) {
-                var msg = (histErr.text || "").trim().split("\n").slice(-1)[0] || "git log failed"
+                var msg = err.trim().split("\n").slice(-1)[0] || "git log failed"
                 root.setHistory(root.histId, { state: "error", incoming: root.histIncoming, lines: [], error: msg.slice(0, 160) })
                 return
             }
             root.setHistory(root.histId, { state: "ready", incoming: root.histIncoming,
-                lines: Model.parseGitLog(histOut.text || ""), error: "" })
+                lines: Model.parseGitLog(out), error: "" })
         }
     }
 
@@ -638,7 +605,7 @@ Item {
 
     Process {
         id: mkdir
-        command: ["mkdir", "-p", root.stateDir]
+        command: ["mkdir", "-p", "-m", "700", "--", root.stateDir]
         onExited: { stateFile.reload(); cacheFile.reload() }
     }
 

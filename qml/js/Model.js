@@ -13,6 +13,45 @@ var IMAGE_HOSTS = ["plugins.omarchy.org", "omarchyplugins.com", "raw.githubuserc
                    "github.com", "user-images.githubusercontent.com", "private-user-images.githubusercontent.com"]
 var CATALOG_ORIGIN = "https://plugins.omarchy.org/"
 
+// Size limits for what the helpers may print. The catalog is around 15 MB today.
+var CATALOG_MAX = 48 * 1048576
+var STATS_MAX = 8 * 1048576
+var CATALOG_ITEMS_MAX = 20000
+
+// curl for one https download: no ~/.curlrc, https only (redirects too), a time
+// limit and a size limit. The caller adds `--` and the address.
+function curlArgs(maxBytes, seconds) {
+    return ["curl", "-q", "--fail", "--silent", "--show-error", "--location", "--max-redirs", "5",
+            "--proto", "=https", "--proto-redir", "=https", "--compressed",
+            "--max-time", String(seconds), "--max-filesize", String(maxBytes), "-A", "omarchy-omanager"]
+}
+
+// ---- scans of the plugins folder ---------------------------------------------
+// Third-party plugins live in ~/.config/omarchy/plugins/<dir>/manifest.json. The
+// directory name is not always the plugin id, so the id is read from the manifest
+// itself: one `[id, version, path, clonedFrom]` JSON array per plugin. Hidden
+// directories are clone staging areas and backups, never plugins, and only plain
+// files are read. One jq per manifest, so a broken file only costs its own line.
+function scanVersionsArgs(dir) {
+    return ["find", dir, "-mindepth", "2", "-maxdepth", "2", "-type", "f",
+            "-name", "manifest.json", "-not", "-path", dir + "/.*", "-size", "-256k",
+            "-exec", "jq", "--compact-output",
+            '[(.id // "" | tostring | .[0:128]), (.version // "" | tostring | .[0:32]), (input_filename), (.omarchy.clonedFrom // "" | tostring | .[0:256])]',
+            "{}", ";"]
+}
+
+// The install time is not in the manifest, so it comes from the directory itself:
+// `stat` prints birth time (0 when the filesystem does not record one), then mtime.
+function scanBirthsArgs(dir) {
+    return ["find", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-not", "-name", ".*",
+            "-exec", "stat", "--format=%W %Y %n", "{}", ";"]
+}
+
+// Which plugin directories are git checkouts (`%h` prints the folder holding .git).
+function scanGitArgs(dir) {
+    return ["find", dir, "-mindepth", "2", "-maxdepth", "2", "-name", ".git", "-type", "d", "-printf", "%h\n"]
+}
+
 function str(v) { return (v === null || v === undefined) ? "" : String(v) }
 function num(v) { var n = Number(v); return isFinite(n) ? n : 0 }
 
@@ -184,9 +223,12 @@ function normalizeCatalog(raw) {
         if (p && !seen[p.id]) { seen[p.id] = true; list.push(p) }
     }
     if (arr) {
-        for (var i = 0; i < arr.length; i++) add(arr[i], "")
+        for (var i = 0; i < arr.length && list.length < CATALOG_ITEMS_MAX; i++) add(arr[i], "")
     } else if (raw && typeof raw === "object") {
-        for (var key in raw) add(raw[key], key)
+        for (var key in raw) {
+            if (list.length >= CATALOG_ITEMS_MAX) break
+            add(raw[key], key)
+        }
     }
     return list
 }
@@ -196,8 +238,10 @@ function normalizeCatalog(raw) {
 // optionally wrapped in plugins / stats / data / items.
 function normalizeStats(raw) {
     var out = {}
+    var n = 0
     function take(id, v) {
-        if (!SAFE_ID.test(str(id)) || !v || typeof v !== "object") return
+        if (n >= CATALOG_ITEMS_MAX || !SAFE_ID.test(str(id)) || !v || typeof v !== "object") return
+        n++
         out[id] = {
             views: num(pick(v, ["views", "detailViews", "detail_views", "view"])),
             hearts: num(pick(v, ["hearts", "likes", "heart"])),
