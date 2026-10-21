@@ -158,10 +158,14 @@ Item {
                     color: ui.accentTint(0.18)
                     border.width: 1
                     border.color: ui.tint(0.08)
-                    Rectangle {
+                    Image {   // the logo, light or dark to suit the window
                         anchors.centerIn: parent
-                        width: ui.px(10); height: width; radius: width / 2
-                        color: ui.accent
+                        width: ui.px(24); height: width
+                        source: Qt.resolvedUrl(ui.lightText ? "../../assets/logo.png" : "../../assets/logo-dark.png")
+                        sourceSize.width: 96
+                        sourceSize.height: 96
+                        smooth: true
+                        mipmap: true
                     }
                 }
 
