@@ -18,6 +18,7 @@ Item {
     property bool confirmReset: false
 
     readonly property bool searching: filter.trim() !== ""
+    readonly property bool onAbout: group === Schema.groups.length && !searching
 
     function rad(k) { return ui.r(k) }
 
@@ -137,7 +138,7 @@ Item {
                 spacing: 0
 
                 Repeater {
-                    model: Schema.groups
+                    model: Schema.groups.concat([{ title: "About" }])
                     delegate: Item {
                         readonly property bool on: index === root.group && !root.searching
                         Layout.fillWidth: true
@@ -175,8 +176,17 @@ Item {
         }
 
         // ---- the settings of the active tab -------------------------------------------
+        // the last tab: About
+        AboutPage {
+            ui: root.ui
+            visible: root.onAbout
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+        }
+
         Flickable {
             id: flick
+            visible: !root.onAbout
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentWidth: width
