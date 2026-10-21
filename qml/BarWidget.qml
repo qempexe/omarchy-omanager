@@ -139,9 +139,12 @@ BarWidget {
     readonly property int updates: service && opt_showBadge ? service.updateCount : 0
     readonly property string icon: "\uDB81\uDC31"
 
+    // The button text is handed to the shell's own button, so it stays plain text.
+    readonly property string barTextPlain: opt_barText.replace(/[<>&]/g, "").slice(0, 10)
+
     readonly property string label: {
         var t = opt_barDisplay === "icon" ? icon
-              : (opt_barDisplay === "text" ? opt_barText : icon + " " + opt_barText)
+              : (opt_barDisplay === "text" ? barTextPlain : icon + " " + barTextPlain)
         return updates > 0 ? t + " " + updates : t
     }
 
