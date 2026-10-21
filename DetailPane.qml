@@ -10,10 +10,24 @@ Rectangle {
     property var p: null
     property bool inline: false          // true = the permanent stage, false = slide-in overlay
 
-    readonly property var st: p ? ui.stateOf(p) : ({ installed: false, enabled: false, update: false, version: "" })
+    readonly property var st: p ? ui.stateOf(p) : ({ installed: false, enabled: false, update: false, version: "", dir: "", installedAt: 0 })
     readonly property bool working: p && ui.service && ui.service.busyIds[p.id] !== undefined
     readonly property bool saved: p && ui.service && ui.service.bookmarks[p.id] === true
     readonly property string cmd: p ? Model.installCommand(p) : ""
+    readonly property var health: p ? ui.healthFor(p) : null
+    readonly property var history: (p && ui.service) ? (ui.service.history[p.id] || null) : null
+    // Load the read-only history the first time a plugin is shown, once we know
+    // where it lives on disk.
+    onPChanged: historyReload.restart()
+    onStChanged: historyReload.restart()
+    Timer {
+        id: historyReload
+        interval: 120
+        onTriggered: {
+            if (root.p && root.st.installed && root.st.dir !== "" && root.history === null)
+                root.ui.service.loadHistory(root.p.id, root.st.dir, false)
+        }
+    }
 
     color: inline ? "transparent" : ui.surface
     border.width: inline ? 0 : 1
@@ -74,6 +88,14 @@ Rectangle {
                 Txt { ui: root.ui; visible: root.p && !root.p.verified && !root.p.builtin && !root.p.local; text: "Unverified"; color: ui.warn }
                 Txt { ui: root.ui; visible: root.st.installed; text: root.st.enabled ? "\u25CF Enabled" : "\u25CB Disabled" }
                 Txt { ui: root.ui; visible: root.st.update; text: "Update: v" + root.st.version + " \u2192 v" + (root.p ? root.p.version : ""); color: ui.warn }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.health !== null
+                spacing: ui.px(6)
+                Txt { ui: root.ui; text: "\u26A0"; color: ui.warn }
+                Txt { ui: root.ui; Layout.fillWidth: true; text: root.health ? root.health.text : ""; color: ui.warn; wrapMode: Text.Wrap }
             }
 
             // preview: 16:9, the large image; falls back to the thumbnail, then an initial
@@ -160,6 +182,11 @@ Rectangle {
                     visible: root.p && root.p.repo !== ""
                     onClicked: ui.service.openUrl(root.p.repo)
                 }
+                Btn {
+                    ui: root.ui; text: "Open folder"
+                    visible: root.st.installed && root.st.dir !== ""
+                    onClicked: ui.service.openPluginDir(root.st.dir)
+                }
             }
 
             Txt {
@@ -193,6 +220,24 @@ Rectangle {
                 Txt { ui: root.ui; Layout.fillWidth: true; text: root.p ? root.p.id : ""; elide: Text.ElideRight }
             }
 
+            // Install facts: shown for any installed plugin, including built-in and
+            // local ones the numbers above skip. The folder row only appears when it
+            // differs from the id, which is the case an update has to get right.
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: ui.px(12)
+                rowSpacing: ui.px(4)
+                visible: root.st.installed
+
+                Txt { ui: root.ui; visible: root.p && (root.p.local || root.p.builtin); text: "Id"; opacity: 0.5 }
+                Txt { ui: root.ui; visible: root.p && (root.p.local || root.p.builtin); Layout.fillWidth: true; text: root.p ? root.p.id : ""; elide: Text.ElideRight }
+                Txt { ui: root.ui; visible: root.st.dir !== "" && (!root.p || root.st.dir !== root.p.id); text: "Folder"; opacity: 0.5 }
+                Txt { ui: root.ui; visible: root.st.dir !== "" && (!root.p || root.st.dir !== root.p.id); Layout.fillWidth: true; text: root.st.dir; elide: Text.ElideRight; color: ui.warn }
+                Txt { ui: root.ui; visible: root.st.installedAt > 0; text: "Installed"; opacity: 0.5 }
+                Txt { ui: root.ui; visible: root.st.installedAt > 0; Layout.fillWidth: true; text: root.st.installedAt > 0 ? Model.relTime(root.st.installedAt, ui.now) : "" }
+            }
+
             Flow {
                 Layout.fillWidth: true
                 spacing: ui.px(6)
@@ -203,6 +248,66 @@ Rectangle {
                         ui: root.ui
                         label: "#" + modelData
                         onClicked: { ui.tags = [modelData]; ui.selected = null }
+                    }
+                }
+            }
+
+            // recent commits, and (when an update is pending) what it would bring in
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.st.installed && root.st.dir !== ""
+                spacing: ui.px(6)
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: ui.px(6)
+                    Txt { ui: root.ui; Layout.fillWidth: true; text: root.history && root.history.incoming ? "Incoming changes" : "Recent changes"; font.pixelSize: ui.fs(11); font.weight: Font.DemiBold; opacity: 0.7 }
+                    Btn {
+                        ui: root.ui; text: "Recent"; implicitHeight: ui.px(22)
+                        visible: root.st.installed && root.st.dir !== ""
+                        onClicked: ui.service.loadHistory(root.p.id, root.st.dir, false)
+                    }
+                    Btn {
+                        ui: root.ui; kind: "primary"; text: "Incoming"; implicitHeight: ui.px(22)
+                        visible: root.st.update
+                        enabled: !root.working
+                        onClicked: ui.service.loadHistory(root.p.id, root.st.dir, true)
+                    }
+                }
+
+                Txt {
+                    ui: root.ui
+                    Layout.fillWidth: true
+                    visible: root.history && root.history.state === "loading"
+                    text: "Loading\u2026"
+                    opacity: 0.5
+                    font.pixelSize: ui.fs(10)
+                }
+                Txt {
+                    ui: root.ui
+                    Layout.fillWidth: true
+                    visible: root.history && root.history.state === "error"
+                    text: root.history ? root.history.error : ""
+                    color: ui.warn
+                    wrapMode: Text.Wrap
+                    font.pixelSize: ui.fs(10)
+                }
+                Txt {
+                    ui: root.ui
+                    Layout.fillWidth: true
+                    visible: root.history && root.history.state === "ready" && root.history.lines.length === 0
+                    text: root.history && root.history.incoming ? "Already up to date." : "No history available."
+                    opacity: 0.5
+                    font.pixelSize: ui.fs(10)
+                }
+                Repeater {
+                    model: (root.history && root.history.state === "ready") ? root.history.lines : []
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: ui.px(8)
+                        Txt { ui: root.ui; text: modelData.hash; color: ui.accent; font.pixelSize: ui.fs(9); opacity: 0.85 }
+                        Txt { ui: root.ui; text: modelData.date; font.pixelSize: ui.fs(9); opacity: 0.45 }
+                        Txt { ui: root.ui; Layout.fillWidth: true; text: modelData.subject; font.pixelSize: ui.fs(10); elide: Text.ElideRight }
                     }
                 }
             }

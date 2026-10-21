@@ -37,8 +37,16 @@ Item {
     property real catalogTime: 0                // ms since epoch of the last good download
 
     // ---- installed --------------------------------------------------------
+    // The installed list and the versions on disk arrive from two different
+    // processes; both end up folded into the same { list, map } pair.
+    readonly property string pluginsDir: Quickshell.env("HOME") + "/.config/omarchy/plugins"
     property var installed: []
     property var installedMap: ({})
+    property var installedBase: null            // last parse of `omarchy plugin list --json`
+    property var installedScan: ({})            // plugin id -> { version, dir } from its manifest.json
+    property var installedBirths: ({})          // plugin dir -> install time (ms), from stat
+    property var gitDirs: ({})                  // plugin dir -> true, the ones that are git checkouts
+    property int installedAttempts: 0           // retries while the shell is still coming up
     property bool installedReady: false
     property var updateIds: []
     readonly property int updateCount: updateIds.length
@@ -47,6 +55,9 @@ Item {
     property var bookmarks: ({})
     property real lastSeen: 0                   // end of the previous visit
     property real prevVisit: 0                  // what "New since last visit" compares against
+    // Saved plugin sets (profiles): a named snapshot of the installed plugins,
+    // each with the repo needed to reinstall it. Persisted with the bookmarks.
+    property var sets: []
 
     // ---- activity ---------------------------------------------------------
     property var queue: []
@@ -84,6 +95,48 @@ Item {
     }
     onCatalogChanged: recompute()
     onInstalledMapChanged: recompute()
+
+    // ---- health (Installed tab) -------------------------------------------
+    readonly property var catalogIdSet: {
+        var m = ({})
+        for (var i = 0; i < catalog.length; i++) m[catalog[i].id] = true
+        return m
+    }
+    readonly property var health: Model.healthOf(installed, installedBirths, gitDirs, catalogIdSet)
+    readonly property int healthCount: health.length
+    readonly property var healthMap: {
+        var m = ({})
+        for (var i = 0; i < health.length; i++) m[health[i].id] = health[i]
+        return m
+    }
+    function healthFor(id) { return healthMap[id] || null }
+
+    // `omarchy plugin list` has no version field, so an installed plugin's
+    // version, directory and install time all come from a scan of its
+    // manifest.json directory. The pieces land at different times, so every path
+    // leads here and the window always sees one consistent pair.
+    function assembleInstalled() {
+        if (!installedBase) return
+        var r = Model.applyScan(installedBase, installedScan, installedBirths)
+        installed = r.list
+        installedMap = r.map
+        installedReady = true
+    }
+    onInstalledScanChanged: assembleInstalled()
+    onInstalledBirthsChanged: assembleInstalled()
+
+    // An empty scan while third-party plugins are installed means jq is gone or
+    // the directory moved. Say it once, so "no updates" is never a mystery.
+    property bool warnedNoVersions: false
+    function warnNoVersions() {
+        if (warnedNoVersions || !installedBase) return
+        for (var i = 0; i < installedBase.list.length; i++) {
+            if (installedBase.list[i].builtin) continue
+            warnedNoVersions = true
+            note("Could not read installed plugin versions (is jq installed?)", false)
+            return
+        }
+    }
 
     function stale() {
         return catalogTime === 0 || (Date.now() - catalogTime) > config.refreshHours * 3600000
@@ -227,21 +280,103 @@ Item {
         stdout: StdioCollector {
             id: listOut
             onStreamFinished: {
-                try {
-                    var r = Model.normalizeInstalled(JSON.parse(listOut.text))
-                    root.installed = r.list
-                    root.installedMap = r.map
-                    root.installedReady = true
-                } catch (e) {
-                    root.note("Could not read the installed plugin list", false)
+                var parsed = null
+                try { parsed = JSON.parse(listOut.text) } catch (e) { parsed = null }
+                var r = parsed ? Model.normalizeInstalled(parsed) : null
+                if (!r || r.list.length === 0) {
+                    // `omarchy plugin list` asks the shell over IPC, and the
+                    // shell cannot answer for the first moment after a restart,
+                    // while its own plugins are still loading. Retry briefly
+                    // rather than showing an empty list and no updates.
+                    if (root.installedAttempts < 5) {
+                        root.installedAttempts++
+                        installedRetry.restart()
+                    } else {
+                        root.note("Could not read the installed plugin list", false)
+                    }
+                    return
                 }
+                root.installedAttempts = 0
+                root.installedBase = r
+                root.assembleInstalled()
+                versionScanner.running = true
+                birthScanner.running = true
+                gitScanner.running = true
             }
+        }
+    }
+
+    Timer {
+        id: installedRetry
+        interval: 1000
+        repeat: false
+        onTriggered: lister.running = true
+    }
+
+    // Third-party plugins live in ~/.config/omarchy/plugins/<dir>/manifest.json.
+    // The directory name is not always the plugin id, so the id is read from the
+    // manifest itself: one `[id, version, path]` JSON array per plugin on stdout.
+    // Hidden directories are clone staging areas and backups, never plugins. One
+    // jq per manifest so a half-written file only costs its own line, and the
+    // whole command stays an argument array like every other one here.
+    Process {
+        id: versionScanner
+        running: false
+        command: ["find", root.pluginsDir, "-mindepth", "2", "-maxdepth", "2",
+                  "-name", "manifest.json", "-not", "-path", root.pluginsDir + "/.*",
+                  "-exec", "jq", "--compact-output",
+                  '[(.id // ""), (.version // ""), (input_filename), (.omarchy.clonedFrom // "")]', "{}", ";"]
+        stdout: StdioCollector {
+            id: versionOut
+            onStreamFinished: {
+                var text = versionOut.text || ""
+                // Nothing read: keep the versions already known rather than
+                // clearing every update the moment a scan comes back empty.
+                if (text.trim() !== "") root.installedScan = Model.normalizeScan(text)
+                else root.warnNoVersions()
+            }
+        }
+        onExited: root.assembleInstalled()
+    }
+
+    // The install time is not in the manifest, so it comes from the directory
+    // itself: `stat` prints birth time (0 when the filesystem does not record
+    // one) then mtime. It is what makes "Newly installed" possible.
+    Process {
+        id: birthScanner
+        running: false
+        command: ["find", root.pluginsDir, "-mindepth", "1", "-maxdepth", "1",
+                  "-type", "d", "-not", "-name", ".*",
+                  "-exec", "stat", "--format=%W %Y %n", "{}", ";"]
+        stdout: StdioCollector {
+            id: birthOut
+            onStreamFinished: {
+                var text = birthOut.text || ""
+                if (text.trim() !== "") root.installedBirths = Model.normalizeBirths(text)
+            }
+        }
+        onExited: root.assembleInstalled()
+    }
+
+    // Which plugin directories are git checkouts. Only those can be updated by
+    // `omarchy plugin update`; the rest are surfaced under Health. `%h` prints
+    // the directory that holds each .git.
+    Process {
+        id: gitScanner
+        running: false
+        command: ["find", root.pluginsDir, "-mindepth", "2", "-maxdepth", "2",
+                  "-name", ".git", "-type", "d", "-printf", "%h\n"]
+        stdout: StdioCollector {
+            id: gitOut
+            onStreamFinished: root.gitDirs = Model.normalizeDirSet(gitOut.text || "")
         }
     }
 
     // ---- actions ----------------------------------------------------------------
     function perform(kind, id, name, repoUrl) {
-        var built = Model.actionArgs(kind, id, repoUrl, config)
+        // update/remove act on the on-disk directory, which can differ from the id.
+        var target = Model.pluginTarget(kind, id, installedMap)
+        var built = Model.actionArgs(kind, target, repoUrl, config)
         if (!built) {
             note("Can't " + kind + " " + name + ": missing or unsafe " + (kind === "install" ? "repository address" : "plugin id"), false)
             return false
@@ -362,7 +497,83 @@ Item {
         opener.command = ["xdg-open", u]
         opener.running = true
     }
+    // Reveal an installed plugin's directory in the file manager. The name comes
+    // from the filesystem, but it is re-checked before it is used as a path.
+    function openPluginDir(dir) {
+        var d = "" + dir
+        if (!/^[A-Za-z0-9._-]{1,128}$/.test(d)) return
+        opener.command = ["xdg-open", pluginsDir + "/" + d]
+        opener.running = true
+    }
     Process { id: opener; running: false }
+
+    // ---- git history (detail pane changelog) -------------------------------------------
+    // Read-only: the recent commits of an installed plugin, or (after a fetch) the
+    // commits an update would bring in. Results are kept per plugin id.
+    property var history: ({})                  // id -> { state, incoming, lines[], error }
+    property string histId: ""
+    property string histDir: ""
+    property bool histIncoming: false
+
+    function setHistory(id, rec) {
+        var h = {}
+        for (var k in history) h[k] = history[k]
+        h[id] = rec
+        history = h
+    }
+
+    function loadHistory(id, dir, incoming) {
+        var d = str(dir)
+        if (!/^[A-Za-z0-9._-]{1,128}$/.test(d)) return
+        var cur = history[id]
+        if (cur && cur.state === "loading") return
+        if (cur && cur.state === "ready" && cur.incoming === (incoming === true)) return
+        histId = id
+        histDir = d
+        histIncoming = incoming === true
+        setHistory(id, { state: "loading", incoming: histIncoming, lines: [], error: "" })
+        if (histIncoming) {
+            fetchProc.command = Model.gitFetchArgs(pluginsDir + "/" + d)
+            fetchProc.running = true
+        } else {
+            startHistoryLog()
+        }
+    }
+
+    function startHistoryLog() {
+        histProc.command = Model.gitLogArgs(pluginsDir + "/" + histDir, histIncoming)
+        histProc.running = true
+    }
+
+    Process {
+        id: fetchProc
+        running: false
+        stderr: StdioCollector { id: fetchErr }
+        onExited: function(code) {
+            if (code !== 0) {
+                root.setHistory(root.histId, { state: "error", incoming: true, lines: [],
+                    error: "Could not reach the remote to fetch changes." })
+                return
+            }
+            root.startHistoryLog()
+        }
+    }
+
+    Process {
+        id: histProc
+        running: false
+        stdout: StdioCollector { id: histOut }
+        stderr: StdioCollector { id: histErr }
+        onExited: function(code) {
+            if (code !== 0) {
+                var msg = (histErr.text || "").trim().split("\n").slice(-1)[0] || "git log failed"
+                root.setHistory(root.histId, { state: "error", incoming: root.histIncoming, lines: [], error: msg.slice(0, 160) })
+                return
+            }
+            root.setHistory(root.histId, { state: "ready", incoming: root.histIncoming,
+                lines: Model.parseGitLog(histOut.text || ""), error: "" })
+        }
+    }
 
     // ---- bookmarks / visits ------------------------------------------------------------
     function toggleBookmark(id) {
@@ -379,9 +590,45 @@ Item {
         saveState()
     }
 
+    // ---- plugin sets (profiles) --------------------------------------------------------
+    // Snapshot the currently installed third-party plugins. Each entry keeps a repo
+    // so a later restore can reinstall what is missing: the catalog's address, or
+    // the manifest's own clonedFrom for a local/unpublished plugin.
+    function saveSet(name) {
+        var label = String(name === undefined || name === null ? "" : name).trim().slice(0, 60)
+        if (label === "") return false
+        var plugins = Model.buildSet(installed, catalog)
+        if (plugins.length === 0) return false
+        var next = sets.slice()
+        next.push({ name: label, savedAt: Date.now(), plugins: plugins })
+        sets = next
+        saveState()
+        return true
+    }
+
+    // Additive restore: enable what is installed but off, install what is missing
+    // (when a repo is known). Nothing already installed is removed or downgraded.
+    function restoreSet(index) {
+        var s = sets[index]
+        if (!s) return 0
+        var plan = Model.planRestore(s, installedMap)
+        for (var i = 0; i < plan.length; i++)
+            perform(plan[i].kind, plan[i].id, plan[i].name, plan[i].repo)
+        return plan.length
+    }
+
+    function deleteSet(index) {
+        if (index < 0 || index >= sets.length) return
+        var next = sets.slice()
+        next.splice(index, 1)
+        sets = next
+        saveState()
+    }
+
     function saveState() {
         stateFile.setText(JSON.stringify({
-            bookmarks: Object.keys(bookmarks), lastSeen: lastSeen, catalogTime: catalogTime
+            bookmarks: Object.keys(bookmarks), lastSeen: lastSeen, catalogTime: catalogTime,
+            sets: sets
         }, null, 2) + "\n")
     }
 
@@ -407,6 +654,7 @@ Item {
                 root.bookmarks = b
                 root.lastSeen = Number(s.lastSeen) || 0
                 root.prevVisit = root.lastSeen
+                root.sets = Array.isArray(s.sets) ? s.sets : []
                 if (root.catalogTime === 0) root.catalogTime = Number(s.catalogTime) || 0
             } catch (e) { }
         }
