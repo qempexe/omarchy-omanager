@@ -37,9 +37,7 @@
       "cardStyle": "soft",
       "density": "comfortable",
       "cornerRadius": 4,
-      "frame": false,
       "fontScale": 100,
-      "surfaceTint": 0,
       "showPreviews": true,
       "windowWidth": 560,
       "windowHeight": 680,
@@ -47,6 +45,11 @@
       "viewMode": "list",
       "columns": "auto",
       "filtersPanel": "left",
+      "frame": false,
+      "frameGradient": true,
+      "frameColor": "accent",
+      "surfaceTint": 0,
+      "opacity": 97,
       "defaultSource": "community",
       "defaultSort": "newest",
       "recencyScope": "either",
@@ -152,13 +155,6 @@
         "description": "0 is square, 20 is very round."
       },
       {
-        "key": "frame",
-        "type": "boolean",
-        "label": "Window outline",
-        "defaultValue": false,
-        "description": "Draw the window edge in the accent color instead of a plain neutral line."
-      },
-      {
         "key": "fontScale",
         "type": "integer",
         "label": "Text size",
@@ -167,16 +163,6 @@
         "step": 5,
         "defaultValue": 100,
         "description": "1 is normal, 1.25 is a quarter bigger."
-      },
-      {
-        "key": "surfaceTint",
-        "type": "integer",
-        "label": "Window tint",
-        "min": 0,
-        "max": 30,
-        "step": 1,
-        "defaultValue": 0,
-        "description": "How much of the accent color washes over the window. 0 keeps it plain, like the other panels."
       },
       {
         "key": "showPreviews",
@@ -253,6 +239,53 @@
         ],
         "defaultValue": "left",
         "description": "Hide it for a cleaner look. Search still works. In a narrow window the filters open from a Filters button instead."
+      },
+      {
+        "key": "frame",
+        "type": "boolean",
+        "label": "Window outline",
+        "defaultValue": false,
+        "description": "Draw the window edge in color instead of a plain neutral line."
+      },
+      {
+        "key": "frameGradient",
+        "type": "boolean",
+        "label": "Outline gradient",
+        "defaultValue": true,
+        "description": "When your theme's window border is a gradient, the outline runs through all its colors, at the same angle."
+      },
+      {
+        "key": "frameColor",
+        "type": "enum",
+        "label": "Outline color",
+        "options": [
+          "accent",
+          "first",
+          "middle",
+          "last"
+        ],
+        "defaultValue": "accent",
+        "description": "The one color of the outline when it isn't a gradient. The border colors come from your theme's window border, and fall back to the accent when it has none."
+      },
+      {
+        "key": "surfaceTint",
+        "type": "integer",
+        "label": "Window tint",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 0,
+        "description": "How much of the accent color washes over the window. 0 keeps it plain, like the other panels."
+      },
+      {
+        "key": "opacity",
+        "type": "integer",
+        "label": "Window opacity",
+        "min": 50,
+        "max": 100,
+        "step": 1,
+        "defaultValue": 97,
+        "description": "How solid the window background is. Lower lets your wallpaper show through."
       },
       {
         "key": "defaultSource",

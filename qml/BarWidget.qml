@@ -52,9 +52,7 @@ BarWidget {
     readonly property string opt_cardStyle: pick(over("cardStyle", setting("cardStyle", "soft")), ["soft", "outline", "flat"], "soft")
     readonly property string opt_density: pick(over("density", setting("density", "comfortable")), ["compact", "comfortable", "spacious"], "comfortable")
     readonly property int opt_cornerRadius: whole(over("cornerRadius", setting("cornerRadius", 4)), 0, 20, 4)
-    readonly property bool opt_frame: flag(over("frame", setting("frame", false)), false)
     readonly property int opt_fontScale: whole(over("fontScale", setting("fontScale", 100)), 80, 150, 100)
-    readonly property int opt_surfaceTint: whole(over("surfaceTint", setting("surfaceTint", 0)), 0, 30, 0)
     readonly property bool opt_showPreviews: flag(over("showPreviews", setting("showPreviews", true)), true)
     readonly property int opt_windowWidth: whole(over("windowWidth", setting("windowWidth", 560)), 400, 1600, 560)
     readonly property int opt_windowHeight: whole(over("windowHeight", setting("windowHeight", 680)), 420, 1100, 680)
@@ -62,6 +60,11 @@ BarWidget {
     readonly property string opt_viewMode: pick(over("viewMode", setting("viewMode", "list")), ["split", "grid", "list", "compact"], "list")
     readonly property string opt_columns: pick(over("columns", setting("columns", "auto")), ["auto", "1", "2", "3", "4"], "auto")
     readonly property string opt_filtersPanel: pick(over("filtersPanel", setting("filtersPanel", "left")), ["left", "hidden"], "left")
+    readonly property bool opt_frame: flag(over("frame", setting("frame", false)), false)
+    readonly property bool opt_frameGradient: flag(over("frameGradient", setting("frameGradient", true)), true)
+    readonly property string opt_frameColor: pick(over("frameColor", setting("frameColor", "accent")), ["accent", "first", "middle", "last"], "accent")
+    readonly property int opt_surfaceTint: whole(over("surfaceTint", setting("surfaceTint", 0)), 0, 30, 0)
+    readonly property int opt_opacity: whole(over("opacity", setting("opacity", 97)), 50, 100, 97)
     readonly property string opt_defaultSource: pick(over("defaultSource", setting("defaultSource", "community")), ["community", "builtin", "all"], "community")
     readonly property string opt_defaultSort: pick(over("defaultSort", setting("defaultSort", "newest")), ["newest", "listed", "updated", "fresh", "hearts", "stars", "views", "rated", "az"], "newest")
     readonly property string opt_recencyScope: pick(over("recencyScope", setting("recencyScope", "either")), ["either", "added", "updated"], "either")
@@ -93,9 +96,7 @@ BarWidget {
         cardStyle: opt_cardStyle,
         density: opt_density,
         cornerRadius: opt_cornerRadius,
-        frame: opt_frame,
         fontScale: opt_fontScale,
-        surfaceTint: opt_surfaceTint,
         showPreviews: opt_showPreviews,
         windowWidth: opt_windowWidth,
         windowHeight: opt_windowHeight,
@@ -103,6 +104,11 @@ BarWidget {
         viewMode: opt_viewMode,
         columns: opt_columns,
         filtersPanel: opt_filtersPanel,
+        frame: opt_frame,
+        frameGradient: opt_frameGradient,
+        frameColor: opt_frameColor,
+        surfaceTint: opt_surfaceTint,
+        opacity: opt_opacity,
         defaultSource: opt_defaultSource,
         defaultSort: opt_defaultSort,
         recencyScope: opt_recencyScope,

@@ -160,13 +160,6 @@ var groups = [
         "hint": "0 is square, 20 is very round."
       },
       {
-        "key": "frame",
-        "label": "Window outline",
-        "kind": "bool",
-        "fallback": false,
-        "hint": "Draw the window edge in the accent color instead of a plain neutral line."
-      },
-      {
         "key": "fontScale",
         "label": "Text size",
         "kind": "int",
@@ -177,18 +170,6 @@ var groups = [
         "divisor": 100,
         "decimals": 2,
         "hint": "1 is normal, 1.25 is a quarter bigger."
-      },
-      {
-        "key": "surfaceTint",
-        "label": "Window tint",
-        "kind": "int",
-        "fallback": 0,
-        "min": 0,
-        "max": 30,
-        "step": 1,
-        "divisor": 1,
-        "decimals": 0,
-        "hint": "How much of the accent color washes over the window. 0 keeps it plain, like the other panels."
       },
       {
         "key": "showPreviews",
@@ -212,7 +193,8 @@ var groups = [
         "step": 20,
         "divisor": 1,
         "decimals": 0,
-        "hint": "How wide the manager opens. From about 720 it also gets the filter sidebar and the List + stage layout."
+        "hint": "How wide the manager opens. From about 720 it also gets the filter sidebar and the List + stage layout.",
+        "section": "Size"
       },
       {
         "key": "windowHeight",
@@ -224,7 +206,8 @@ var groups = [
         "step": 20,
         "divisor": 1,
         "decimals": 0,
-        "hint": "How tall the manager opens."
+        "hint": "How tall the manager opens.",
+        "section": "Size"
       },
       {
         "key": "openAs",
@@ -240,7 +223,8 @@ var groups = [
           "window": "Own window"
         },
         "hint": "Where the bar button opens the manager. You can always pop it out or dock it back from the header.",
-        "control": "tiles"
+        "control": "tiles",
+        "section": "Layout"
       },
       {
         "key": "viewMode",
@@ -260,7 +244,8 @@ var groups = [
           "compact": "Compact"
         },
         "hint": "List + stage keeps a big preview of the selected plugin beside the list (wide windows only). Cards show screenshots, list fits the most, compact is a dense table-like view.",
-        "control": "tiles"
+        "control": "tiles",
+        "section": "Layout"
       },
       {
         "key": "columns",
@@ -289,7 +274,8 @@ var groups = [
               "grid"
             ]
           }
-        ]
+        ],
+        "section": "Layout"
       },
       {
         "key": "filtersPanel",
@@ -304,7 +290,86 @@ var groups = [
           "left": "Shown",
           "hidden": "Hidden"
         },
-        "hint": "Hide it for a cleaner look. Search still works. In a narrow window the filters open from a Filters button instead."
+        "hint": "Hide it for a cleaner look. Search still works. In a narrow window the filters open from a Filters button instead.",
+        "section": "Layout"
+      },
+      {
+        "key": "frame",
+        "label": "Window outline",
+        "kind": "bool",
+        "fallback": false,
+        "hint": "Draw the window edge in color instead of a plain neutral line.",
+        "section": "Look"
+      },
+      {
+        "key": "frameGradient",
+        "label": "Outline gradient",
+        "kind": "bool",
+        "fallback": true,
+        "hint": "When your theme's window border is a gradient, the outline runs through all its colors, at the same angle.",
+        "when": [
+          {
+            "key": "frame",
+            "is": [
+              "true"
+            ]
+          }
+        ],
+        "section": "Look"
+      },
+      {
+        "key": "frameColor",
+        "label": "Outline color",
+        "kind": "enum",
+        "fallback": "accent",
+        "options": [
+          "accent",
+          "first",
+          "middle",
+          "last"
+        ],
+        "labels": {
+          "accent": "Accent",
+          "first": "Border's first",
+          "middle": "Border's middle",
+          "last": "Border's last"
+        },
+        "hint": "The one color of the outline when it isn't a gradient. The border colors come from your theme's window border, and fall back to the accent when it has none.",
+        "when": [
+          {
+            "key": "frame",
+            "is": [
+              "true"
+            ]
+          }
+        ],
+        "section": "Look"
+      },
+      {
+        "key": "surfaceTint",
+        "label": "Window tint",
+        "kind": "int",
+        "fallback": 0,
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "divisor": 1,
+        "decimals": 0,
+        "hint": "How much of the accent color washes over the window. 0 keeps it plain, like the other panels.",
+        "section": "Look"
+      },
+      {
+        "key": "opacity",
+        "label": "Window opacity",
+        "kind": "int",
+        "fallback": 97,
+        "min": 50,
+        "max": 100,
+        "step": 1,
+        "divisor": 1,
+        "decimals": 0,
+        "hint": "How solid the window background is. Lower lets your wallpaper show through.",
+        "section": "Look"
       }
     ]
   },
@@ -599,9 +664,7 @@ var defaults = {
   "cardStyle": "soft",
   "density": "comfortable",
   "cornerRadius": 4,
-  "frame": false,
   "fontScale": 100,
-  "surfaceTint": 0,
   "showPreviews": true,
   "windowWidth": 560,
   "windowHeight": 680,
@@ -609,6 +672,11 @@ var defaults = {
   "viewMode": "list",
   "columns": "auto",
   "filtersPanel": "left",
+  "frame": false,
+  "frameGradient": true,
+  "frameColor": "accent",
+  "surfaceTint": 0,
+  "opacity": 97,
   "defaultSource": "community",
   "defaultSort": "newest",
   "recencyScope": "either",

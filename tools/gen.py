@@ -78,15 +78,14 @@ SPEC = [
       {"compact": "Compact", "comfortable": "Comfortable", "spacious": "Spacious"},
       "How much air there is between things.", control="tiles"),
     I("cornerRadius", "Roundness", 4, 0, 20, 2, "0 is square, 20 is very round."),
-    B("frame", "Window outline", False, "Draw the window edge in the accent color instead of a plain neutral line."),
     I("fontScale", "Text size", 100, 80, 150, 5, "1 is normal, 1.25 is a quarter bigger.", divisor=100, decimals=2),
-    I("surfaceTint", "Window tint", 0, 0, 30, 1, "How much of the accent color washes over the window. 0 keeps it plain, like the other panels."),
     B("showPreviews", "Show screenshots", True,
       "Loads preview images from plugins.omarchy.org. Turn off to stay fully offline for images."),
   ]),
-  ("Window", [
+  ("Window", sec("Size", [
     I("windowWidth", "Window width", 560, 400, 1600, 20, "How wide the manager opens. From about 720 it also gets the filter sidebar and the List + stage layout."),
     I("windowHeight", "Window height", 680, 420, 1100, 20, "How tall the manager opens."),
+  ]) + sec("Layout", [
     E("openAs", "Open as", "panel", ["panel", "window"], {"panel": "Bar panel", "window": "Own window"},
       "Where the bar button opens the manager. You can always pop it out or dock it back from the header.", control="tiles"),
     E("viewMode", "Layout", "list", ["split", "grid", "list", "compact"],
@@ -97,7 +96,18 @@ SPEC = [
       "Auto fits as many as the window allows.", when=[{"key": "viewMode", "is": ["grid"]}]),
     E("filtersPanel", "Filters sidebar", "left", ["left", "hidden"], {"left": "Shown", "hidden": "Hidden"},
       "Hide it for a cleaner look. Search still works. In a narrow window the filters open from a Filters button instead."),
-  ]),
+  ]) + sec("Look", [
+    B("frame", "Window outline", False, "Draw the window edge in color instead of a plain neutral line."),
+    B("frameGradient", "Outline gradient", True,
+      "When your theme's window border is a gradient, the outline runs through all its colors, at the same angle.",
+      when=[{"key": "frame", "is": ["true"]}]),
+    E("frameColor", "Outline color", "accent", ["accent", "first", "middle", "last"],
+      {"accent": "Accent", "first": "Border's first", "middle": "Border's middle", "last": "Border's last"},
+      "The one color of the outline when it isn't a gradient. The border colors come from your theme's window border, "
+      "and fall back to the accent when it has none.", when=[{"key": "frame", "is": ["true"]}]),
+    I("surfaceTint", "Window tint", 0, 0, 30, 1, "How much of the accent color washes over the window. 0 keeps it plain, like the other panels."),
+    I("opacity", "Window opacity", 97, 50, 100, 1, "How solid the window background is. Lower lets your wallpaper show through."),
+  ])),
   ("Browse", [
     E("defaultSource", "Start on", "community", ["community", "builtin", "all"],
       {"community": "Community", "builtin": "Built-in", "all": "Everything"},

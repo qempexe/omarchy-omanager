@@ -28,6 +28,7 @@ Item {
         colorMode: "theme", customBg: "#141414", customFg: "#e0e0e0", accentColor: "#ff6a1f", textColor: "auto",
         cardStyle: "soft", density: "comfortable",
         cornerRadius: 4, fontScale: 100, surfaceTint: 0, showPreviews: true, frame: false, openAs: "panel",
+        frameGradient: true, frameColor: "accent", opacity: 97,
         windowWidth: 560, windowHeight: 680, viewMode: "list", columns: "auto", filtersPanel: "left",
         defaultSource: "community", defaultSort: "newest", recencyScope: "either", recencyDays: "any",
         verifiedOnly: false, hideInstalled: false, showCounts: true, newBadgeDays: 14,
@@ -42,6 +43,7 @@ Item {
     readonly property real fontPct: cfgSafe.fontScale
     readonly property real tintPct: cfgSafe.surfaceTint
     readonly property bool frameOn: cfgSafe.frame === true
+    readonly property real opacityF: Math.max(0.5, Math.min(1, Number(cfgSafe.opacity) / 100))
     readonly property bool showPreviews: cfgSafe.showPreviews === true
     readonly property int newBadgeDays: Number(cfgSafe.newBadgeDays)
     readonly property string filtersPanelKey: cfgSafe.filtersPanel
@@ -108,6 +110,19 @@ Item {
     readonly property color accent: custom ? hexOr(cfgSafe.accentColor, "#ff6a1f")
         : (mono ? fg
         : (colorModeKey === "borders" && borderColors.length > 0 ? Qt.color(borderColors[0]) : themeAc))
+
+    // The window outline: the window border's gradient, one color from it, or the accent.
+    readonly property bool frameGradientOn: frameOn && cfgSafe.frameGradient !== false && borderColors.length > 1
+    readonly property color frameColor: {
+        var n = borderColors.length
+        var pick = cfgSafe.frameColor
+        if (n === 0 || pick === "accent" || !pick) return accent
+        if (pick === "first") return Qt.color(borderColors[0])
+        if (pick === "last") return Qt.color(borderColors[n - 1])
+        return Qt.color(borderColors[Math.floor((n - 1) / 2)])
+    }
+    // the window background, as solid as Window opacity says
+    readonly property color panelColor: Qt.rgba(surface.r, surface.g, surface.b, opacityF)
 
     // The colors of a scheme, for its tile in Settings: background, text, accent,
     // and (palette, borders) three of the category colors it would use.
