@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- Previews are now shown as small thumbnails, made once from each download by `vipsthumbnail` in its own process with a memory and time limit. The window only ever opens those, never the downloaded file, so a broken or oversized image can't weigh down the shell. Previews cached by earlier versions are cleared once and fetched again.
+
 ## 2.0.1
 
 - The right-click menu now works: Enable, Disable, Save, Open folder, Open repository, Show details and Remove now act on the plugin you opened it on.

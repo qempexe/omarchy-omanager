@@ -22,7 +22,7 @@ omarchy restart shell
 
 Then place it from the bar settings, or move it with `omarchy bar move io.github.qempexe.omanager --section right` (or `left`, `center`). A right click on the button opens straight to Settings.
 
-It needs `curl` and `jq`, which Omarchy already has. Copying an install command and pasting into a text field go through `wl-clipboard` (`wl-copy`, `wl-paste`).
+It needs `curl`, `jq` and `vipsthumbnail` (from libvips), which Omarchy already has. Copying an install command and pasting into a text field go through `wl-clipboard` (`wl-copy`, `wl-paste`).
 
 ## Browsing
 
@@ -32,7 +32,7 @@ Five tabs: **Browse**, **Installed**, **Updates** (with *Update all*), **Saved**
 
 Four layouts: *List*, *List + stage* (a big preview of the selected plugin beside the list, from about 720 px wide), *Cards* in one to four columns, and *Compact*, a dense table of the whole catalog. The header's layout button cycles through them.
 
-Every card shows the plugin's stars, hearts, views and install-command copies. Previews are downloaded once into a local cache and shown from there.
+Every card shows the plugin's stars, hearts, views and install-command copies. Previews are downloaded once, made into small thumbnails in a separate, limited process, and shown from a local cache.
 
 ## Filters
 
@@ -152,7 +152,7 @@ omarchy restart shell
 ```bash
 omarchy plugin remove io.github.qempexe.omanager
 rm -rf ~/.local/state/omarchy-omanager     # settings, saved plugins, sets, the cached catalog
-rm -rf ~/.cache/omarchy-omanager           # cached previews
+rm -rf ~/.cache/omarchy-omanager           # cached preview thumbnails
 ```
 
 ## Changelog
