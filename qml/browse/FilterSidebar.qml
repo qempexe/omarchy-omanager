@@ -172,7 +172,7 @@ Flickable {
             title: "Tags"
             visible: ui.facets.tags.length > 0
             Repeater {
-                model: ui.facets.tags.slice(0, 24)
+                model: ui.facets.tags
                 delegate: Chip {
                     ui: root.ui
                     label: modelData.name

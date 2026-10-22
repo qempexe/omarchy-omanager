@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -414,5 +414,26 @@ const ids = r => r.items.map(p => p.id);
   assert.deepStrictEqual(plan2, [{ kind: "enable", id: "local.thing", name: "Thing", repo: "" }]);
 
   assert.deepStrictEqual(M.planRestore(null, map), [], "no set plans nothing");
+})();
+
+(function manyCategories() {
+  // a catalog with thousands of different categories and tags still gives a short sidebar
+  const many = { plugins: [] };
+  for (let i = 0; i < 5000; i++)
+    many.plugins.push({ id: "x.p" + i, name: "P" + i, category: "C" + i, tags: ["t" + i], repo: "https://github.com/x/p" + i });
+  many.plugins.push({ id: "x.big1", name: "Big", category: "Common", tags: ["shared"], repo: "https://github.com/x/b1" });
+  many.plugins.push({ id: "x.big2", name: "Big2", category: "Common", tags: ["shared"], repo: "https://github.com/x/b2" });
+  const c = M.normalizeCatalog(many);
+  const q = (st) => M.query(c, [], {}, Object.assign({}, base, { now }, st)).facets;
+  const f = q({});
+  assert.strictEqual(f.categories.length, M.MAX_CATEGORIES);
+  assert.strictEqual(f.tags.length, M.MAX_TAGS);
+  assert.strictEqual(f.categories[0].name, "Common", "the busiest come first");
+  // the one picked stays in the list even when it would not make the cut
+  const g = q({ category: "C4999", tags: ["t4998"] });
+  assert.strictEqual(g.categories.length, M.MAX_CATEGORIES + 1);
+  assert.ok(g.categories.some(x => x.name === "C4999"));
+  assert.ok(q({ tags: ["t4998"] }).tags.some(x => x.name === "t4998"));
+  assert.strictEqual(q({ category: "Common" }).categories.length, M.MAX_CATEGORIES, "already listed: not added twice");
 })();
 console.log("model tests: ok");

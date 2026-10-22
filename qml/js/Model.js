@@ -760,6 +760,22 @@ function countMap(list, field) {
     return out
 }
 
+// The sidebar shows only the busiest categories and tags, plus whatever is picked
+// now, so a catalog with thousands of different ones still makes a short list.
+var MAX_CATEGORIES = 24
+var MAX_TAGS = 24
+function topFacets(list, max, keep) {
+    var out = list.slice(0, max)
+    var want = (keep || []).filter(function(k) { return k !== "" })
+    for (var i = 0; i < want.length; i++) {
+        var have = false
+        for (var j = 0; j < out.length; j++) if (out[j].name === want[i]) { have = true; break }
+        if (have) continue
+        for (var k = max; k < list.length; k++) if (list[k].name === want[i]) { out.push(list[k]); break }
+    }
+    return out
+}
+
 // st: { query, source, category, tags[], collection, verification ("any" |
 //       "verified" | "unverified"; verifiedOnly is the older way to ask for
 //       "verified"), hideInstalled, status, scope, days, sort, now, since,
@@ -787,7 +803,8 @@ function query(catalog, installedList, installedMap, st) {
         for (var b = 0; b < base.length; b++) if (inCollection(base[b], COLLECTIONS[c].key)) n++
         if (n > 0) collections.push({ key: COLLECTIONS[c].key, name: COLLECTIONS[c].label, count: n })
     }
-    var facets = { categories: countMap(base, "category"), tags: countMap(base, "tag").slice(0, 40),
+    var facets = { categories: topFacets(countMap(base, "category"), MAX_CATEGORIES, [st.category || ""]),
+                   tags: topFacets(countMap(base, "tag"), MAX_TAGS, (st.tags || []).slice(0, 8)),
                    collections: collections }
     var wantTags = st.tags || []
     var items = base.filter(function(p) {
