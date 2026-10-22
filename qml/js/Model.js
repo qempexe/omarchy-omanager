@@ -138,7 +138,10 @@ function safeCatalogUrl(u) {
 // ---- preview images -------------------------------------------------------
 // Previews are downloaded into a local cache folder and shown from there, so an
 // image is fetched once (https, size and time limits) and never streamed straight
-// from the network into the window.
+// from the network into the window. A download is never shown as it is: it is first
+// made into a small thumbnail by vipsthumbnail, in its own process with a memory and
+// time cap, and only that clean PNG (no metadata) is ever decoded by the shell. An
+// image built to blow up while it is decoded can then only stop its own thumbnail.
 var IMAGE_MAX = 4 * 1048576
 var IMAGE_BATCH = 12
 var IMAGE_KEEP = 1200
@@ -159,6 +162,27 @@ function imageName(url) {
 
 function isImageName(name) {
     return /^[0-9a-f]{16}\.(webp|png|jpg|avif|gif|img)$/.test(str(name))
+}
+
+// The thumbnail made from a download: the same hash, always a PNG.
+function thumbName(name) {
+    return isImageName(name) ? str(name).slice(0, 16) + ".png" : ""
+}
+function isThumbName(name) {
+    return /^[0-9a-f]{16}\.png$/.test(str(name))
+}
+
+// Makes a download into a thumbnail at most 960 by 540, all metadata left behind.
+// Run with VIPS_BLOCK_UNTRUSTED=1, so only plain image loaders are used, with one
+// worker thread (VIPS_CONCURRENCY=1), and under prlimit: 512 MiB of memory and
+// 20 seconds of processor at most. One worker keeps it inside that memory however
+// many cores the machine has.
+var THUMB_MEMORY = 536870912
+function thumbArgs(raw, out) {
+    if (!/^\/[^\0\[\]]*\/[0-9a-f]{16}\.(webp|png|jpg|avif|gif|img)$/.test(str(raw))) return null
+    if (!/^\/[^\0\[\]]*\/[0-9a-f]{16}\.png$/.test(str(out))) return null
+    return ["prlimit", "--as=" + THUMB_MEMORY, "--cpu=20", "--",
+            "vipsthumbnail", raw, "--size", "960x540", "-o", out + "[keep=none]"]
 }
 
 // One curl for a batch of images. Each line it prints is "<exit code> <file>", so
@@ -187,14 +211,14 @@ function imageReport(text, dir) {
     return ok
 }
 
-// `find -printf '%T@ %f\n'` of the cache folder -> { keep: {name: true}, drop: [names] },
+// `find -printf '%T@ %f\n'` of the thumbnail folder -> { keep: {name: true}, drop: [names] },
 // the newest IMAGE_KEEP kept.
 function imageInventory(text) {
     var rows = []
     var lines = str(text).split("\n")
     for (var i = 0; i < lines.length; i++) {
         var m = /^([0-9.]+) (\S+)$/.exec(lines[i].trim())
-        if (m && isImageName(m[2])) rows.push({ t: Number(m[1]), name: m[2] })
+        if (m && isThumbName(m[2])) rows.push({ t: Number(m[1]), name: m[2] })
     }
     rows.sort(function(x, y) { return y.t - x.t })
     var keep = {}, drop = []

@@ -85,7 +85,7 @@ Item {
         if (!started) {
             started = true
             mkdir.running = true
-            imageMkdir.start(["mkdir", "-p", "-m", "700", "--", imageDir])
+            prepareImages()
             refreshInstalled()
         } else if (url !== "" && url !== lastUrl) {
             refresh(true)
@@ -333,41 +333,51 @@ Item {
     }
 
     // ---- preview images (local cache) --------------------------------------------
-    // A card asks for its preview through imageFor(url): it gets the cached file once
-    // it is there, and "" meanwhile while the image is fetched in the background,
-    // a small batch at a time. imageTick changes whenever new files arrive.
-    readonly property string imageDir: (Quickshell.env("XDG_CACHE_HOME")
-        || Quickshell.env("HOME") + "/.cache") + "/omarchy-omanager/previews"
-    property var imageFiles: ({})               // file name -> true, the complete ones
+    // A card asks for its preview through imageFor(url): it gets the cached thumbnail
+    // once it is there, and "" meanwhile while the image is fetched in the background,
+    // a small batch at a time. imageTick changes whenever new thumbnails arrive.
+    //
+    // Downloads land in incoming/ and are never shown: each one is made into a small,
+    // metadata-free PNG in thumbs/ by vipsthumbnail, in its own capped process (see
+    // Model.thumbArgs), and the download is removed. The shell only ever decodes those.
+    readonly property string cacheDir: (Quickshell.env("XDG_CACHE_HOME")
+        || Quickshell.env("HOME") + "/.cache") + "/omarchy-omanager"
+    readonly property string imageDir: cacheDir + "/thumbs"
+    readonly property string incomingDir: cacheDir + "/incoming"
+    property var imageFiles: ({})               // thumbnail name -> true, the finished ones
     property int imageTick: 0
     property bool imagesScanned: false
-    property var imageWanted: ({})              // file name -> url, waiting for a batch
+    property var imageWanted: ({})              // download name -> url, waiting for a batch
     property var imageBatch: []                 // [{ name, url }] being downloaded
-    property var imageFailed: ({})              // file name -> true, not retried this session
+    property var thumbQueue: []                 // download names waiting to be made thumbnails
+    property string thumbing: ""                // the one being made now
+    property var imageFailed: ({})              // download name -> true, not retried this session
 
     function imageFor(url, tick) {
         if (url === "" || url === undefined || url === null) return ""
         var name = Model.imageName(url)
-        if (imageFiles[name]) return "file://" + imageDir + "/" + name
-        if (imagesScanned && !imageFailed[name] && imageWanted[name] === undefined) {
+        var thumb = Model.thumbName(name)
+        if (imageFiles[thumb]) return "file://" + imageDir + "/" + thumb
+        if (imagesScanned && !imageFailed[name] && imageWanted[name] === undefined
+                && thumbQueue.indexOf(name) < 0 && thumbing !== name) {
             imageWanted[name] = String(url)
             imageQueue.restart()
         }
         return ""
     }
 
-    // Still on its way: waiting for a batch, or in the one being downloaded.
+    // Still on its way: waiting for a batch, being downloaded, or being made small.
     function imageBusy(url, tick) {
         if (!url) return false
         var name = Model.imageName(url)
-        if (imageFiles[name] || imageFailed[name]) return false
-        if (imageWanted[name] !== undefined) return true
+        if (imageFiles[Model.thumbName(name)] || imageFailed[name]) return false
+        if (imageWanted[name] !== undefined || thumbing === name || thumbQueue.indexOf(name) >= 0) return true
         for (var i = 0; i < imageBatch.length; i++) if (imageBatch[i].name === name) return true
         return false
     }
 
     function nextImageBatch() {
-        if (imageGet.running || imageMkdir.running) return
+        if (!imagesScanned || imageGet.running || thumbing !== "" || thumbQueue.length > 0) return
         var items = []
         for (var name in imageWanted) {
             if (items.length >= Model.IMAGE_BATCH) break
@@ -376,7 +386,7 @@ Item {
         if (items.length === 0) return
         for (var i = 0; i < items.length; i++) delete imageWanted[items[i].name]
         imageBatch = items
-        imageGet.start(Model.imageBatchArgs(items, imageDir))
+        imageGet.start(Model.imageBatchArgs(items, incomingDir))
     }
 
     Timer { id: imageQueue; interval: 150; onTriggered: root.nextImageBatch() }
@@ -386,31 +396,90 @@ Item {
         seconds: 90
         maxOut: 65536
         onDone: function(code, out, err) {
-            var ok = Model.imageReport(out, root.imageDir)
-            var files = {}
-            for (var k in root.imageFiles) files[k] = true
+            var ok = Model.imageReport(out, root.incomingDir)
+            var queue = root.thumbQueue.slice()
             var leftovers = []
             for (var i = 0; i < root.imageBatch.length; i++) {
                 var name = root.imageBatch[i].name
-                if (ok[name]) files[name] = true
-                else { root.imageFailed[name] = true; leftovers.push(root.imageDir + "/" + name) }
+                if (ok[name]) queue.push(name)
+                else { root.imageFailed[name] = true; leftovers.push(root.incomingDir + "/" + name) }
             }
             root.imageBatch = []
-            root.imageFiles = files
-            root.imageTick++
-            // whatever did not arrive whole is removed, so a half file is never shown
-            if (leftovers.length > 0) imageClean.start(["rm", "-f", "--"].concat(leftovers))
-            root.nextImageBatch()
+            root.thumbQueue = queue
+            // whatever did not arrive whole is removed
+            root.removeFiles(leftovers)
+            root.nextThumb()
         }
     }
 
-    Run { id: imageClean; seconds: 20; maxOut: 4096 }
+    // one download at a time into a thumbnail; the download goes either way
+    function nextThumb() {
+        if (thumber.running) return
+        if (root.thumbQueue.length === 0) { root.thumbing = ""; root.nextImageBatch(); return }
+        var name = root.thumbQueue[0]
+        root.thumbQueue = root.thumbQueue.slice(1)
+        var argv = Model.thumbArgs(root.incomingDir + "/" + name, root.imageDir + "/" + Model.thumbName(name))
+        if (!argv) { root.imageFailed[name] = true; root.nextThumb(); return }
+        root.thumbing = name
+        thumber.start(argv)
+    }
+    Run {
+        id: thumber
+        seconds: 30
+        maxOut: 16384
+        environment: ({ VIPS_BLOCK_UNTRUSTED: "1", VIPS_CONCURRENCY: "1", MALLOC_ARENA_MAX: "2" })
+        onDone: function(code, out, err) {
+            var name = root.thumbing
+            var thumb = Model.thumbName(name)
+            if (code === 0) {
+                var files = {}
+                for (var k in root.imageFiles) files[k] = true
+                files[thumb] = true
+                root.imageFiles = files
+                root.imageTick++
+            } else {
+                root.imageFailed[name] = true
+                root.removeFiles(root.imageDir + "/" + thumb)
+            }
+            root.removeFiles(root.incomingDir + "/" + name)
+            root.thumbing = ""
+            // the helper is still winding down while this runs: start the next one after
+            Qt.callLater(root.nextThumb)
+        }
+    }
 
-    // At start: make the folder, then see what is already cached, keeping the
-    // newest ones and removing the oldest past the limit.
+    // files to remove, one rm at a time
+    property var toRemove: []
+    function removeFiles(paths) {
+        root.toRemove = root.toRemove.concat(paths)
+        if (!imageClean.running && root.toRemove.length > 0) {
+            const batch = root.toRemove.slice(0, 2000)
+            root.toRemove = root.toRemove.slice(2000)
+            imageClean.start(["rm", "-f", "--"].concat(batch))
+        }
+    }
+    Run {
+        id: imageClean
+        seconds: 20
+        maxOut: 4096
+        onDone: function(code, out, err) { Qt.callLater(root.removeFiles, []) }
+    }
+
+    // At start: make the folders and clear out downloads left from last time (and
+    // the old previews/ folder, whose files were shown as downloaded), then see which
+    // thumbnails are cached, keeping the newest and removing the oldest past the limit.
+    function prepareImages() {
+        imageReset.start(["rm", "-rf", "--", root.cacheDir + "/previews", root.incomingDir])
+    }
+    Run {
+        id: imageReset
+        seconds: 60
+        maxOut: 4096
+        onDone: function(code, out, err) { imageMkdir.start(["mkdir", "-p", "-m", "700", "--", root.imageDir, root.incomingDir]) }
+    }
     Run {
         id: imageMkdir
-        seconds: 10
+        seconds: 20
         maxOut: 4096
         onDone: imageScan.start(["find", root.imageDir, "-mindepth", "1", "-maxdepth", "1",
                                  "-type", "f", "-printf", "%T@ %f\n"])
@@ -425,8 +494,7 @@ Item {
             root.imageFiles = inv.keep
             root.imagesScanned = true
             root.imageTick++
-            if (inv.drop.length > 0)
-                imageClean.start(["rm", "-f", "--"].concat(inv.drop.slice(0, 2000).map(function(n) { return root.imageDir + "/" + n })))
+            if (inv.drop.length > 0) root.removeFiles(inv.drop.map(function(n) { return root.imageDir + "/" + n }))
         }
     }
 
