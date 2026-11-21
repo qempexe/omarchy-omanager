@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, catalogNormalizer, normalizeCatalogStep, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, scanVersionsArgs, scanBirthsArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -28,6 +28,13 @@ const raw = { plugins: [
   assert.strictEqual(M.normalizeCatalog([raw.plugins[0]]).length, 1, "bare array ok");
   const keyed = M.normalizeCatalog({ plugins: { "x.one": { name: "One" } } });
   assert.strictEqual(keyed[0].id, "x.one", "map keyed by id ok");
+  for (const shape of [raw, { plugins: { "x.one": { name: "One" } } }, raw.plugins]) {
+    const work = M.catalogNormalizer(shape);
+    let steps = 0;
+    while (!M.normalizeCatalogStep(work, 2)) steps++;
+    assert.deepStrictEqual(work.list, M.normalizeCatalog(shape), "incremental normalization matches sync");
+    assert.ok(steps >= 0);
+  }
 })();
 
 (function urls() {
@@ -49,6 +56,14 @@ const inst = M.normalizeInstalled([
 const base = { query: "", source: "community", category: "", tags: [], verifiedOnly: false, hideInstalled: false,
   status: "any", scope: "either", days: 0, sort: "newest", now, since: 0, bookmarks: {}, updateSet: {} };
 const ids = r => r.items.map(p => p.id);
+
+(function groupedScans() {
+  for (const scan of [M.scanVersionsArgs, M.scanBirthsArgs]) {
+    const args = scan("/home/example/plugins");
+    assert.deepStrictEqual(args.slice(-2), ["{}", "+"], "find batches plugin paths into one helper");
+    assert.ok(args.includes("-exec"));
+  }
+})();
 
 (function sorting() {
   assert.strictEqual(ids(M.query(cat, inst.list, inst.map, { ...base, sort: "newest" }))[0], "b.brand-new", "newest = most recently uploaded");
@@ -85,6 +100,17 @@ const ids = r => r.items.map(p => p.id);
   assert.strictEqual(f.categories.find(c => c.name === "Widgets").count, 2);
   // facets ignore the category choice so the sidebar keeps showing siblings
   assert.strictEqual(run({ category: "Media" }).facets.categories.length, f.categories.length);
+  assert.deepStrictEqual(run({ collection: "vpn" }).facets.categories, f.categories,
+    "switching collections reuses the same pre-collection counts");
+  assert.deepStrictEqual(run({ sort: "az" }).facets.tags, f.tags,
+    "sorting does not change facet counts");
+  assert.deepStrictEqual(ids(run({ status: "saved", bookmarks: { "b.brand-new": true } })),
+    ["b.brand-new"], "changed bookmarks invalidate the cached pool");
+  assert.deepStrictEqual(ids(run({ status: "updates", updateSet: { "a.old-popular": true } })),
+    ["a.old-popular"], "changed update sets invalidate cached results");
+  const removed = cat.filter(p => p.id !== "b.brand-new");
+  assert.ok(!ids(M.query(removed, inst.list, inst.map, base)).includes("b.brand-new"),
+    "replaced catalog invalidates cached facets and results");
 })();
 
 (function updates() {

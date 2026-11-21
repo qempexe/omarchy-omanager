@@ -31,20 +31,20 @@ function curlArgs(maxBytes, seconds) {
 // directory name is not always the plugin id, so the id is read from the manifest
 // itself: one `[id, version, path, clonedFrom]` JSON array per plugin. Hidden
 // directories are clone staging areas and backups, never plugins, and only plain
-// files are read. One jq per manifest, so a broken file only costs its own line.
+// files are read. Group manifests into one jq process instead of one per plugin.
 function scanVersionsArgs(dir) {
     return ["find", dir, "-mindepth", "2", "-maxdepth", "2", "-type", "f",
             "-name", "manifest.json", "-not", "-path", dir + "/.*", "-size", "-256k",
             "-exec", "jq", "--compact-output",
             '[(.id // "" | tostring | .[0:128]), (.version // "" | tostring | .[0:32]), (input_filename), (.omarchy.clonedFrom // "" | tostring | .[0:256])]',
-            "{}", ";"]
+            "{}", "+"]
 }
 
 // The install time is not in the manifest, so it comes from the directory itself:
 // `stat` prints birth time (0 when the filesystem does not record one), then mtime.
 function scanBirthsArgs(dir) {
     return ["find", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "d", "-not", "-name", ".*",
-            "-exec", "stat", "--format=%W %Y %n", "{}", ";"]
+            "-exec", "stat", "--format=%W %Y %n", "{}", "+"]
 }
 
 // Which plugin directories are git checkouts (`%h` prints the folder holding .git).
@@ -329,7 +329,12 @@ function normalizePlugin(raw, fallbackId) {
 }
 
 function normalizeCatalog(raw) {
-    var list = []
+    var state = catalogNormalizer(raw)
+    while (!normalizeCatalogStep(state, 200)) { }
+    return state.list
+}
+
+function catalogNormalizer(raw) {
     var arr = null
     if (Array.isArray(raw)) arr = raw
     else if (raw && typeof raw === "object") {
@@ -340,20 +345,29 @@ function normalizeCatalog(raw) {
             else if (v && typeof v === "object") raw = v      // plugins keyed by id
         }
     }
-    var seen = {}
-    function add(entry, fallbackId) {
-        var p = normalizePlugin(entry, fallbackId)
-        if (p && !seen[p.id]) { seen[p.id] = true; list.push(p) }
-    }
-    if (arr) {
-        for (var i = 0; i < arr.length && list.length < CATALOG_ITEMS_MAX; i++) add(arr[i], "")
-    } else if (raw && typeof raw === "object") {
-        for (var key in raw) {
-            if (list.length >= CATALOG_ITEMS_MAX) break
-            add(raw[key], key)
+    return { arr: arr, raw: raw, keys: arr || !raw || typeof raw !== "object" ? [] : Object.keys(raw),
+             pos: 0, seen: Object.create(null), list: [] }
+}
+
+// A small step can run on a Qt timer: other UI events get time between steps.
+function normalizeCatalogStep(state, count, budgetMs) {
+    var total = state.arr ? state.arr.length : state.keys.length
+    var end = Math.min(total, state.pos + Math.max(1, count))
+    var started = Date.now()
+    for (; state.pos < end && state.list.length < CATALOG_ITEMS_MAX; state.pos++) {
+        var key = state.arr ? "" : state.keys[state.pos]
+        var p = normalizePlugin(state.arr ? state.arr[state.pos] : state.raw[key], key)
+        if (p && !state.seen[p.id]) {
+            state.seen[p.id] = true
+            state.list.push(p)
+        }
+        // Check only occasionally to keep the synchronous normalizer cheap.
+        if (budgetMs && (state.pos % 16) === 15 && Date.now() - started >= budgetMs) {
+            state.pos++
+            return false
         }
     }
-    return list
+    return state.pos >= total || state.list.length >= CATALOG_ITEMS_MAX
 }
 
 // ---- engagement stats (separate API: hearts / views / copies) ------------------
@@ -627,12 +641,29 @@ function isBar(p) {
     return p.kindKey === "service" || p.category === "Appearance"
 }
 
+// Catalog records keep their identity across filter changes. Their category,
+// tags and descriptions do not change when live engagement stats arrive.
+// Compute the six collection flags once per record, not on every query.
+function collectionBits(p) {
+    if (p._collectionBits !== undefined) return p._collectionBits
+    var bits = 0
+    if (isKids(p)) bits |= 1
+    if (isVpn(p)) bits |= 2
+    if (isBar(p)) bits |= 4
+    if (p.tags.indexOf("ai") >= 0) bits |= 8
+    if (p.tags.indexOf("games") >= 0) bits |= 16
+    if (p.tags.indexOf("security") >= 0) bits |= 32
+    p._collectionBits = bits
+    return bits
+}
 function inCollection(p, key) {
     switch (key) {
-    case "kids": return isKids(p)
-    case "vpn": return isVpn(p)
-    case "bar": return isBar(p)
-    case "ai": case "games": case "security": return p.tags.indexOf(key) >= 0
+    case "kids": return (collectionBits(p) & 1) !== 0
+    case "vpn": return (collectionBits(p) & 2) !== 0
+    case "bar": return (collectionBits(p) & 4) !== 0
+    case "ai": return (collectionBits(p) & 8) !== 0
+    case "games": return (collectionBits(p) & 16) !== 0
+    case "security": return (collectionBits(p) & 32) !== 0
     default: return true
     }
 }
@@ -776,6 +807,7 @@ function topFacets(list, max, keep) {
     return out
 }
 
+var _facetCache = null
 // st: { query, source, category, tags[], collection, verification ("any" |
 //       "verified" | "unverified"; verifiedOnly is the older way to ask for
 //       "verified"), hideInstalled, status, scope, days, sort, now, since,
@@ -788,24 +820,44 @@ function query(catalog, installedList, installedMap, st) {
     var q = parseQuery(st.query)
     var verification = st.verification || (st.verifiedOnly ? "verified" : "any")
     var cutoff = st.days > 0 ? (st.now || Date.now()) - st.days * DAY : 0
-    var base = []
-    for (var i = 0; i < all.length; i++) {
-        var p = all[i]
-        if (!verificationOk(p, verification)) continue
-        if (st.hideInstalled && installedMap[p.id]) continue
-        if (!statusOk(p, st.status, ctx)) continue
-        if (cutoff > 0 && !(dateOf(p, st.scope) >= cutoff)) continue
-        if (searchOk(p, q)) { p._i = i; base.push(p) }
-    }
-    var collections = []
-    for (var c = 0; c < COLLECTIONS.length; c++) {
-        var n = 0
-        for (var b = 0; b < base.length; b++) if (inCollection(base[b], COLLECTIONS[c].key)) n++
-        if (n > 0) collections.push({ key: COLLECTIONS[c].key, name: COLLECTIONS[c].label, count: n })
-    }
-    var facets = { categories: topFacets(countMap(base, "category"), MAX_CATEGORIES, [st.category || ""]),
-                   tags: topFacets(countMap(base, "tag"), MAX_TAGS, (st.tags || []).slice(0, 8)),
+    var cache = _facetCache
+    var same = cache && cache.all === all && cache.map === installedMap
+        && cache.query === st.query && cache.verification === verification
+        && cache.hideInstalled === st.hideInstalled && cache.status === st.status
+        && cache.cutoff === cutoff && cache.scope === st.scope && cache.since === ctx.since
+        && cache.bookmarks === ctx.bookmarks && cache.updates === ctx.updateSet
+        && cache.health === ctx.healthSet
+    var base, counts
+    if (same) {
+        base = cache.base
+        counts = cache.counts
+    } else {
+        base = []
+        for (var i = 0; i < all.length; i++) {
+            var p = all[i]
+            if (!verificationOk(p, verification)) continue
+            if (st.hideInstalled && installedMap[p.id]) continue
+            if (!statusOk(p, st.status, ctx)) continue
+            if (cutoff > 0 && !(dateOf(p, st.scope) >= cutoff)) continue
+            if (searchOk(p, q)) { p._i = i; base.push(p) }
+        }
+        var collections = []
+        for (var c = 0; c < COLLECTIONS.length; c++) {
+            var n = 0
+            for (var b = 0; b < base.length; b++) if (inCollection(base[b], COLLECTIONS[c].key)) n++
+            if (n > 0) collections.push({ key: COLLECTIONS[c].key, name: COLLECTIONS[c].label, count: n })
+        }
+        counts = { categories: countMap(base, "category"), tags: countMap(base, "tag"),
                    collections: collections }
+        _facetCache = { all: all, map: installedMap, query: st.query,
+                        verification: verification, hideInstalled: st.hideInstalled,
+                        status: st.status, cutoff: cutoff, scope: st.scope, since: ctx.since,
+                        bookmarks: ctx.bookmarks, updates: ctx.updateSet, health: ctx.healthSet,
+                        base: base, counts: counts }
+    }
+    var facets = { categories: topFacets(counts.categories, MAX_CATEGORIES, [st.category || ""]),
+                   tags: topFacets(counts.tags, MAX_TAGS, (st.tags || []).slice(0, 8)),
+                   collections: counts.collections }
     var wantTags = st.tags || []
     var items = base.filter(function(p) {
         if (st.collection && !inCollection(p, st.collection)) return false

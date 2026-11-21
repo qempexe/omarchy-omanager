@@ -26,6 +26,14 @@ class ManifestTests(unittest.TestCase):
         for rel in self.m["entryPoints"].values():
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), rel)
 
+    def test_catalog_and_preview_work_are_bounded(self):
+        base = os.path.dirname(self.m["entryPoints"]["barWidget"])
+        service = read(os.path.join(base, "Service.qml"))
+        self.assertIn("root.notifyImages()", service)
+        self.assertIn("ImageNotifier { id: imageNotify }", service)
+        self.assertIn("readonly property int imageTick: imageNotify.tick", service)
+        self.assertIn("Model.normalizeCatalogStep(task.normalizer, 160, 8)", service)
+
     def test_settings_drift(self):
         qml = read("qml/BarWidget.qml")
         used = set(re.findall(r'setting\("([A-Za-z0-9_]+)"', qml))

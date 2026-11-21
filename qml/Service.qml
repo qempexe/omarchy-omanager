@@ -224,6 +224,8 @@ Item {
     }
 
     // ---- catalog download ---------------------------------------------------
+    property var catalogTasks: []
+    property var catalogActive: null
     function refresh(force) {
         if (catalogState === "loading") return
         if (!force && !stale()) return
@@ -256,14 +258,40 @@ Item {
             if (!fromCache) failFetch("The download was not valid JSON")
             return false
         }
-        var list = Model.normalizeCatalog(parsed)
+        var tasks = catalogTasks.slice()
+        tasks.push({ text: text, fromCache: fromCache, normalizer: Model.catalogNormalizer(parsed) })
+        catalogTasks = tasks
+        catalogStep.running = true
+        return true
+    }
+
+    Timer {
+        id: catalogStep
+        interval: 1
+        repeat: true
+        onTriggered: {
+            if (!root.catalogActive) {
+                if (root.catalogTasks.length === 0) { running = false; return }
+                root.catalogActive = root.catalogTasks[0]
+                root.catalogTasks = root.catalogTasks.slice(1)
+            }
+            var task = root.catalogActive
+            if (!Model.normalizeCatalogStep(task.normalizer, 160, 8)) return
+            root.catalogActive = null
+            root.finishCatalog(task.normalizer.list, task.text, task.fromCache)
+        }
+    }
+
+    function finishCatalog(list, text, fromCache) {
         if (list.length === 0) {
             if (!fromCache) failFetch("Downloaded, but no plugins were recognised in it")
             return false
         }
         Model.applyStats(list, stats)
         catalog = list
-        catalogState = "ready"
+        // A cached result can finish while a newer network request is running.
+        // Keep that request in "loading" so its response is not discarded.
+        if (!fromCache || catalogState !== "loading") catalogState = "ready"
         catalogError = ""
         haveCache = true
         if (!fromCache) {
@@ -345,13 +373,17 @@ Item {
     readonly property string imageDir: cacheDir + "/thumbs"
     readonly property string incomingDir: cacheDir + "/incoming"
     property var imageFiles: ({})               // thumbnail name -> true, the finished ones
-    property int imageTick: 0
+    readonly property int imageTick: imageNotify.tick
     property bool imagesScanned: false
     property var imageWanted: ({})              // download name -> url, waiting for a batch
     property var imageBatch: []                 // [{ name, url }] being downloaded
     property var thumbQueue: []                 // download names waiting to be made thumbnails
     property string thumbing: ""                // the one being made now
     property var imageFailed: ({})              // download name -> true, not retried this session
+    // One notification per frame group, not one rebind of every visible image
+    // for each thumbnail that finishes.
+    ImageNotifier { id: imageNotify }
+    function notifyImages() { imageNotify.notify() }
 
     function imageFor(url, tick) {
         if (url === "" || url === undefined || url === null) return ""
@@ -406,6 +438,7 @@ Item {
             }
             root.imageBatch = []
             root.thumbQueue = queue
+            if (leftovers.length > 0) root.notifyImages()
             // whatever did not arrive whole is removed
             root.removeFiles(leftovers)
             root.nextThumb()
@@ -432,15 +465,12 @@ Item {
             var name = root.thumbing
             var thumb = Model.thumbName(name)
             if (code === 0) {
-                var files = {}
-                for (var k in root.imageFiles) files[k] = true
-                files[thumb] = true
-                root.imageFiles = files
-                root.imageTick++
+                root.imageFiles[thumb] = true
             } else {
                 root.imageFailed[name] = true
                 root.removeFiles(root.imageDir + "/" + thumb)
             }
+            root.notifyImages()
             root.removeFiles(root.incomingDir + "/" + name)
             root.thumbing = ""
             // the helper is still winding down while this runs: start the next one after
@@ -493,7 +523,7 @@ Item {
             var inv = Model.imageInventory(out)
             root.imageFiles = inv.keep
             root.imagesScanned = true
-            root.imageTick++
+            root.notifyImages()
             if (inv.drop.length > 0) root.removeFiles(inv.drop.map(function(n) { return root.imageDir + "/" + n }))
         }
     }
