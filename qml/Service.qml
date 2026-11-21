@@ -584,6 +584,10 @@ Item {
 
     // ---- actions ----------------------------------------------------------------
     function perform(kind, id, name, repoUrl) {
+        if (queue.length >= 50) {
+            note("Queue is full (50 waiting). Wait or stop remaining jobs before adding more.", false)
+            return false
+        }
         // update/remove act on the on-disk directory, which can differ from the id.
         var target = Model.pluginTarget(kind, id, installedMap)
         var built = Model.actionArgs(kind, target, repoUrl, config)
@@ -605,6 +609,19 @@ Item {
         return true
     }
 
+    // Leave the current action running so an install cannot be interrupted midway.
+    function cancelQueued() {
+        var busy = {}
+        for (var id in busyIds) busy[id] = busyIds[id]
+        for (var i = 0; i < queue.length; i++) {
+            if (!current || queue[i].id !== current.id) delete busy[queue[i].id]
+        }
+        var count = queue.length
+        queue = []
+        busyIds = busy
+        if (count > 0) note("Stopped " + count + " waiting job(s); current action continues.", false)
+    }
+
     function drain() {
         if (current !== null || queue.length === 0) return
         current = queue[0]
@@ -619,7 +636,7 @@ Item {
         for (var k in busyIds) if (k !== c.id) busy[k] = busyIds[k]
         busyIds = busy
         current = null
-        refreshInstalled()
+        if (queue.length === 0) refreshInstalled()
         drain()
     }
 

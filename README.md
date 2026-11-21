@@ -26,7 +26,9 @@ It needs `curl`, `jq` and `vipsthumbnail` (from libvips), which Omarchy already 
 
 ## Browsing
 
-Five tabs: **Browse**, **Installed**, **Updates** (with *Update all*), **Saved** and **Sets**, plus **Settings**.
+Five tabs: **Browse**, **Installed**, **Updates**, **Saved** and **Sets**, plus **Settings**.
+
+Browse, Installed and Updates have a batch bar: click **Select** to pick individual plugins, or **All** to select eligible plugins in the current filtered list. **All** first asks you to confirm the number of plugins it would select; cancelling leaves your selection unchanged. Up to 20 selected chips appear in a short scrolling area; **+N more** opens the full scrollable selection, where any plugin can be removed. Choose **Install selected**, **Remove selected**, or **Update selected** in the corresponding tab. Batch install, removal and update always ask for confirmation. A batch runs at most 50 actions; the rest stay selected for a later batch. **Stop after current** cancels waiting jobs without interrupting the running one. Built-in plugins cannot be batch-removed; disallowed unverified plugins cannot be batch-installed.
 
 ![Browse, as cards](screenshots/cards.png)
 

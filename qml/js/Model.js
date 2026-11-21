@@ -838,6 +838,35 @@ function actionArgs(kind, id, repo, cfg) {
     return null
 }
 
+// Eligible items for the three tab-specific batch actions. Inputs from the
+// catalog and plugin list are untrusted; never queue an unsafe or busy record.
+function batchCandidates(items, kind, installedMap, updateSet, allowUnverified, busyIds) {
+    var out = [], seen = Object.create(null)
+    for (var i = 0; i < items.length; i++) {
+        var p = items[i]
+        if (!p || !SAFE_ID.test(str(p.id)) || seen[p.id]
+            || Object.prototype.hasOwnProperty.call(busyIds, p.id)) continue
+        seen[p.id] = true
+        var inst = Object.prototype.hasOwnProperty.call(installedMap, p.id) ? installedMap[p.id] : null
+        if (kind === "install") {
+            if (inst || p.builtin || p.local || !p.installable || !safeRepoUrl(p.repo)
+                || (!allowUnverified && !p.verified)) continue
+        } else if (kind === "remove") {
+            if (!inst || inst.builtin) continue
+        } else if (kind === "update") {
+            if (!inst || inst.builtin || !Object.prototype.hasOwnProperty.call(updateSet, p.id)) continue
+        } else continue
+        out.push(p)
+    }
+    return out
+}
+
+function withoutSelection(selection, id) {
+    var next = Object.create(null)
+    for (var key in selection) if (key !== id) next[key] = selection[key]
+    return next
+}
+
 function installCommand(p) {
     return p.repo && !p.builtin ? "omarchy plugin add " + p.repo + " --enable" : ""
 }

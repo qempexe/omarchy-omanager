@@ -26,6 +26,62 @@ class ManifestTests(unittest.TestCase):
         for rel in self.m["entryPoints"].values():
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), rel)
 
+    def test_batch_controls_in_active_plugin(self):
+        """The live manifest must reach the UI with all three batch actions."""
+        widget = self.m["entryPoints"]["barWidget"]
+        view = os.path.join(os.path.dirname(widget), "panel", "ManagerView.qml")
+        state = os.path.join(os.path.dirname(widget), "core", "UiState.qml")
+        model = os.path.join(os.path.dirname(widget), "js", "Model.js")
+        for name in (view, state, model):
+            self.assertTrue(os.path.isfile(os.path.join(ROOT, name)), name)
+        for label in ("Install selected", "Remove selected", "Update selected"):
+            self.assertIn(label, read(view))
+        self.assertIn("ui.requestBatch(ui.batchKind)", read(view))
+        self.assertIn("function batchCandidates(", read(model))
+        self.assertIn("Model.batchCandidates(", read(state))
+
+    def test_selected_names_can_be_removed_in_active_plugin(self):
+        widget = self.m["entryPoints"]["barWidget"]
+        base = os.path.dirname(widget)
+        view = read(os.path.join(base, "panel", "ManagerView.qml"))
+        state = read(os.path.join(base, "core", "UiState.qml"))
+        self.assertIn("model: ui.selectedPlugins", view)
+        self.assertIn("text: chip.plugin.name", view)
+        self.assertIn("onClicked: ui.unselect(chip.plugin.id)", view)
+        self.assertIn("opacity: chipArea.containsMouse ? 1 : 0", view)
+        self.assertIn("function unselect(id) { selection = Model.withoutSelection(selection, id) }", state)
+
+    def test_selected_names_wrap_before_batch_buttons(self):
+        widget = self.m["entryPoints"]["barWidget"]
+        view = read(os.path.join(os.path.dirname(widget), "panel", "ManagerView.qml"))
+        self.assertRegex(view, r"Flow\s*\{\s*id: selectedChips")
+        self.assertNotIn("Flickable.HorizontalFlick", view)
+        self.assertIn("Layout.alignment: Qt.AlignTop", view)
+
+    def test_select_all_requires_confirmation(self):
+        widget = self.m["entryPoints"]["barWidget"]
+        base = os.path.dirname(widget)
+        view = read(os.path.join(base, "panel", "ManagerView.qml"))
+        state = read(os.path.join(base, "core", "UiState.qml"))
+        self.assertRegex(view, r'text: "All";[^\n]*onClicked: ui\.requestSelectAll\(\)')
+        self.assertIn('confirm = { kind: "selectAll", tab: tabName, list: visible.slice() }', state)
+        self.assertIn('dlg.choosingAll ? "Select all " + dlg.n + " plugins in " + dlg.tabLabel', view)
+        self.assertIn("onClicked: ui.confirm = null", view)
+        self.assertIn('if (c.kind === "selectAll") ui.confirmSelectAll(c)', view)
+        self.assertIn("selectAllVisible(visible)", state)
+
+    def test_large_batch_is_bounded(self):
+        base = os.path.dirname(self.m["entryPoints"]["barWidget"])
+        view = read(os.path.join(base, "panel", "ManagerView.qml"))
+        state = read(os.path.join(base, "core", "UiState.qml"))
+        service = read(os.path.join(base, "Service.qml"))
+        self.assertIn("model: ui.selectedPlugins.slice(0, 20)", view)
+        self.assertIn("model: ui.selectedPlugins", view)
+        self.assertIn("Layout.preferredHeight: Math.min(selectedChips.implicitHeight, ui.px(82))", view)
+        self.assertIn("if (list.length > batchLimit)", state)
+        self.assertIn("function cancelQueued()", service)
+        self.assertIn("if (queue.length === 0) refreshInstalled()", service)
+
     def test_settings_drift(self):
         qml = read("qml/BarWidget.qml")
         used = set(re.findall(r'setting\("([A-Za-z0-9_]+)"', qml))

@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, batchCandidates, withoutSelection, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -49,6 +49,35 @@ const inst = M.normalizeInstalled([
 const base = { query: "", source: "community", category: "", tags: [], verifiedOnly: false, hideInstalled: false,
   status: "any", scope: "either", days: 0, sort: "newest", now, since: 0, bookmarks: {}, updateSet: {} };
 const ids = r => r.items.map(p => p.id);
+
+(function batches() {
+  const visible = cat.concat(inst.list.filter(p => p.builtin || p.id === "me.local-dev"));
+  const eligible = (kind, allow = true, busy = {}) =>
+    M.batchCandidates(visible, kind, inst.map, { "a.old-popular": true }, allow, busy).map(p => p.id);
+  assert.deepStrictEqual(eligible("install").sort(), ["b.brand-new", "c.upgraded"]);
+  assert.deepStrictEqual(eligible("install", false), ["c.upgraded"], "blocked unverified installs");
+  assert.deepStrictEqual(eligible("remove").sort(), ["a.old-popular", "me.local-dev"], "no built-in removals");
+  assert.deepStrictEqual(eligible("update"), ["a.old-popular"]);
+  assert.deepStrictEqual(eligible("install", true, { "b.brand-new": "Installing" }), ["c.upgraded"]);
+  assert.deepStrictEqual(M.batchCandidates([cat[1], cat[1]], "install", inst.map, {}, true, {}).map(p => p.id),
+    ["b.brand-new"], "duplicate records queue only once");
+  assert.deepStrictEqual(eligible("unknown"), []);
+})();
+
+(function selectedNames() {
+  const selected = Object.create(null);
+  selected["a.old-popular"] = cat[0];
+  selected["b.brand-new"] = cat[1];
+  const remaining = M.withoutSelection(selected, "a.old-popular");
+  assert.deepStrictEqual(Object.keys(remaining), ["b.brand-new"], "clicking a name removes only that plugin");
+  assert.strictEqual(remaining["b.brand-new"].name, "Brand New");
+  assert.deepStrictEqual(Object.keys(selected), ["a.old-popular", "b.brand-new"], "original selection unchanged");
+  assert.deepStrictEqual(Object.keys(M.withoutSelection(remaining, "b.brand-new")), [], "last name clears count");
+  assert.deepStrictEqual(Object.keys(M.withoutSelection(remaining, "absent")), ["b.brand-new"], "unknown name is a no-op");
+  const prototypeId = Object.create(null);
+  prototypeId.constructor = { id: "constructor", name: "Constructor" };
+  assert.deepStrictEqual(Object.keys(M.withoutSelection(prototypeId, "constructor")), [], "prototype-like ids can be removed");
+})();
 
 (function sorting() {
   assert.strictEqual(ids(M.query(cat, inst.list, inst.map, { ...base, sort: "newest" }))[0], "b.brand-new", "newest = most recently uploaded");
