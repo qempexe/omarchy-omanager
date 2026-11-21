@@ -583,7 +583,7 @@ Item {
     }
 
     // ---- actions ----------------------------------------------------------------
-    function perform(kind, id, name, repoUrl) {
+    function perform(kind, id, name, repoUrl, section) {
         // update/remove act on the on-disk directory, which can differ from the id.
         var target = Model.pluginTarget(kind, id, installedMap)
         var built = Model.actionArgs(kind, target, repoUrl, config)
@@ -591,6 +591,13 @@ Item {
             note("Can't " + kind + " " + name + ": missing or unsafe " + (kind === "install" ? "repository address" : "plugin id"), false)
             return false
         }
+        var placementArgs = kind === "install" && section !== undefined
+            ? Model.installPlacementArgs(id, section) : null
+        if (kind === "install" && section !== undefined && !placementArgs) {
+            note("Can't install " + name + ": invalid bar placement", false)
+            return false
+        }
+        if (placementArgs) built.argv = ["omarchy", "plugin", "add", Model.safeRepoUrl(repoUrl), "--yes"]
         var verb = { install: "Installing", update: "Updating", enable: "Enabling",
                      disable: "Disabling", remove: "Removing" }[kind]
         var busy = {}
@@ -599,7 +606,8 @@ Item {
         busyIds = busy
         var q = queue.slice()
         q.push({ kind: kind, id: id, name: name, label: verb + " " + name + "\u2026",
-                 argv: built.argv, fallback: built.fallback, triedFallback: false })
+                  argv: built.argv, fallback: built.fallback, triedFallback: false,
+                  placementArgs: placementArgs })
         queue = q
         drain()
         return true
@@ -614,6 +622,16 @@ Item {
 
     function finishCurrent(ok, text) {
         var c = current
+        if (ok && c.placementArgs) {
+            var q = queue.slice()
+            q.unshift({ kind: "enable", id: c.id, name: c.name,
+                        label: "Enabling " + c.name + "\u2026",
+                        argv: c.placementArgs, fallback: null, triedFallback: false })
+            queue = q
+            current = null
+            drain()
+            return
+        }
         note((ok ? "" : "Failed: ") + c.label.replace("\u2026", "") + (text ? " \u2014 " + text : ""), ok)
         var busy = {}
         for (var k in busyIds) if (k !== c.id) busy[k] = busyIds[k]

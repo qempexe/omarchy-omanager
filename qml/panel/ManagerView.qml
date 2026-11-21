@@ -651,6 +651,7 @@ Item {
                 readonly property var plug: ui.confirm ? ui.confirm.p : null
                 readonly property var list: (ui.confirm && ui.confirm.list) ? ui.confirm.list : null
                 readonly property int n: list ? list.length : (plug ? 1 : 0)
+                readonly property bool choosingPlacement: ui.confirm && ui.confirm.placement === true
                 readonly property string verb: kind === "remove" ? "Remove" : (kind === "update" ? "Update" : "Install")
 
                 Txt {
@@ -686,6 +687,36 @@ Item {
                     opacity: 0.55
                     text: dlg.plug ? "From " + dlg.plug.repo : ""
                 }
+                Txt {
+                    ui: view.ui
+                    Layout.fillWidth: true
+                    visible: dlg.choosingPlacement
+                    text: "Place the bar widget:"
+                    font.weight: Font.DemiBold
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    visible: dlg.choosingPlacement
+                    spacing: ui.px(6)
+                    Repeater {
+                        model: [
+                            { label: "Left", section: "left" },
+                            { label: "Center begin", section: "centerBegin" },
+                            { label: "Center", section: "center" },
+                            { label: "Center end", section: "centerEnd" },
+                            { label: "Tray", section: "tray" },
+                            { label: "Right", section: "right" }
+                        ]
+                        delegate: Btn {
+                            ui: view.ui
+                            text: modelData.label
+                            active: ui.confirm && ui.confirm.section === modelData.section
+                            onClicked: {
+                                if (ui.confirm) ui.confirm = Object.assign({}, ui.confirm, { section: modelData.section })
+                            }
+                        }
+                    }
+                }
                 RowLayout {
                     Layout.alignment: Qt.AlignRight
                     spacing: ui.px(8)
@@ -699,7 +730,7 @@ Item {
                             ui.confirm = null
                             if (!c) return
                             if (c.list) ui.runBatch(c.kind, c.list)
-                            else ui.runAction(c.kind, c.p)
+                            else ui.runAction(c.kind, c.p, c.placement ? c.section : undefined)
                         }
                     }
                 }

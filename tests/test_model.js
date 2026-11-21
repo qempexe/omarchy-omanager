@@ -3,7 +3,7 @@
 // Model.js starts with the QML-only `.pragma library` line, so strip it before evaluating.
 const fs = require("fs"), path = require("path"), assert = require("assert");
 let src = fs.readFileSync(path.join(__dirname, "..", "qml", "js", "Model.js"), "utf8").replace(/^\.pragma.*$/m, "");
-const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, relTime, fmtCount, validHex};")();
+const M = new Function(src + "; return {normalizeCatalog, normalizeStats, applyStats, normalizeInstalled, normalizeScan, normalizeBirths, normalizeDirSet, applyScan, healthOf, pluginTarget, buildSet, planRestore, gitLogArgs, gitFetchArgs, parseGitLog, imageName, thumbName, thumbArgs, imageBatchArgs, imageReport, imageInventory, query, MAX_CATEGORIES, MAX_TAGS, findUpdates, compareVersions, safeRepoUrl, safeImageUrl, safeWebUrl, parseQuery, inCollection, ranksOf, kindKey, safeCatalogUrl, actionArgs, installPlacementArgs, relTime, fmtCount, validHex};")();
 
 const DAY = 864e5, now = Date.parse("2026-10-07T12:00:00Z");
 const iso = d => new Date(now - d * DAY).toISOString();
@@ -28,6 +28,17 @@ const raw = { plugins: [
   assert.strictEqual(M.normalizeCatalog([raw.plugins[0]]).length, 1, "bare array ok");
   const keyed = M.normalizeCatalog({ plugins: { "x.one": { name: "One" } } });
   assert.strictEqual(keyed[0].id, "x.one", "map keyed by id ok");
+  assert.strictEqual(M.normalizeCatalog([{id: "a.widget", barWidget: {defaultSection: "right"}}])[0].defaultSection, "right");
+  assert.strictEqual(M.normalizeCatalog([{id: "a.widget", barWidget: {defaultSection: "center"}}])[0].defaultSection, "centerEnd");
+})();
+
+(function placement() {
+  assert.deepStrictEqual(M.installPlacementArgs("a.widget", "tray"),
+    ["omarchy", "plugin", "enable", "a.widget", "--section", "tray"]);
+  for (const section of ["left", "centerBegin", "center", "centerEnd", "tray", "right"])
+    assert.ok(M.installPlacementArgs("a.widget", section));
+  assert.strictEqual(M.installPlacementArgs("a.widget", "--index"), null);
+  assert.strictEqual(M.installPlacementArgs("--bad", "left"), null);
 })();
 
 (function urls() {

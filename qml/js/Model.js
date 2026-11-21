@@ -298,6 +298,10 @@ function normalizePlugin(raw, fallbackId) {
         category: str(pick(raw, ["category", "barWidget.category"]) || "Other").slice(0, 40),
         tags: words(pick(raw, ["tags", "topics", "keywords"])).slice(0, 8).map(function(t) { return t.slice(0, 30) }),
         kinds: words(pick(raw, ["kinds", "manifest.kinds", "kind"])).slice(0, 6),
+        defaultSection: (function(section) {
+            return section === "center" ? "centerEnd"
+                : (BAR_SECTIONS.indexOf(section) >= 0 ? section : "centerEnd")
+        })(str(pick(raw, ["barWidget.defaultSection", "manifest.barWidget.defaultSection"]))),
         kind: str(pick(raw, ["kind"])).slice(0, 40),
         stars: num(pick(raw, ["stars", "stargazers", "stargazersCount", "metrics.stars", "github.stars"])),
         hearts: num(pick(raw, ["hearts", "metrics.hearts", "engagement.hearts", "likes"])),
@@ -836,6 +840,12 @@ function actionArgs(kind, id, repo, cfg) {
     if (kind === "remove")
         return { argv: base.concat(["remove", id, "--yes"]), fallback: base.concat(["remove", id]) }
     return null
+}
+
+var BAR_SECTIONS = ["left", "centerBegin", "center", "centerEnd", "tray", "right"]
+function installPlacementArgs(id, section) {
+    if (!SAFE_ID.test(str(id)) || BAR_SECTIONS.indexOf(section) < 0) return null
+    return ["omarchy", "plugin", "enable", id, "--section", section]
 }
 
 function installCommand(p) {

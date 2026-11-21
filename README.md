@@ -28,6 +28,8 @@ It needs `curl`, `jq` and `vipsthumbnail` (from libvips), which Omarchy already 
 
 Five tabs: **Browse**, **Installed**, **Updates** (with *Update all*), **Saved** and **Sets**, plus **Settings**.
 
+Installing a single bar widget offers a placement choice (left, center begin, center, center end, tray, or right) before enabling it. When automatic enabling is off, the widget is installed without placement and can be enabled later.
+
 ![Browse, as cards](screenshots/cards.png)
 
 Four layouts: *List*, *List + stage* (a big preview of the selected plugin beside the list, from about 720 px wide), *Cards* in one to four columns, and *Compact*, a dense table of the whole catalog. The header's layout button cycles through them.

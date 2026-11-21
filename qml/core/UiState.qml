@@ -468,14 +468,22 @@ Item {
             service.note("Blocked: " + p.name + " is not verified (see Settings \u203A Safety)", false)
             return
         }
-        var ask = ((kind === "install" || kind === "update") && cfgSafe.confirmInstall)
+        var placement = kind === "install" && cfgSafe.enableAfterInstall !== false
+            && (p.kindKey === "bar-widget"
+                || (p.kinds && p.kinds.indexOf("bar-widget") >= 0))
+            && !(p.kindKey === "bar" || (p.kinds && p.kinds.indexOf("bar") >= 0))
+        var ask = placement || ((kind === "install" || kind === "update") && cfgSafe.confirmInstall)
                || (kind === "remove" && cfgSafe.confirmRemove)
-        if (ask) { confirm = { kind: kind, p: p }; return }
+        if (ask) {
+            confirm = { kind: kind, p: p, placement: placement,
+                        section: p.defaultSection || "centerEnd" }
+            return
+        }
         runAction(kind, p)
     }
 
-    function runAction(kind, p) {
-        service.perform(kind, p.id, p.name, p.repo)
+    function runAction(kind, p, section) {
+        service.perform(kind, p.id, p.name, p.repo, section)
     }
 
     // What the stage (big pane in "List + stage" layout) shows: the selection, else the top result.

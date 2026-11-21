@@ -26,6 +26,20 @@ class ManifestTests(unittest.TestCase):
         for rel in self.m["entryPoints"].values():
             self.assertTrue(os.path.isfile(os.path.join(ROOT, rel)), rel)
 
+    def test_single_widget_install_offers_placement(self):
+        widget = self.m["entryPoints"]["barWidget"]
+        base = os.path.dirname(widget)
+        view = read(os.path.join(base, "panel", "ManagerView.qml"))
+        state = read(os.path.join(base, "core", "UiState.qml"))
+        service = read(os.path.join(base, "Service.qml"))
+        self.assertIn('p.kindKey === "bar-widget"', state)
+        self.assertIn('p.kinds.indexOf("bar-widget") >= 0', state)
+        self.assertIn('confirm = { kind: kind, p: p, placement: placement,', state)
+        self.assertIn('text: "Place the bar widget:"', view)
+        self.assertIn("c.placement ? c.section : undefined", view)
+        self.assertIn("Model.installPlacementArgs(id, section)", service)
+        self.assertIn("if (ok && c.placementArgs)", service)
+
     def test_settings_drift(self):
         qml = read("qml/BarWidget.qml")
         used = set(re.findall(r'setting\("([A-Za-z0-9_]+)"', qml))
